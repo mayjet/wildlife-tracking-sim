@@ -1,0 +1,17 @@
+services:
+  workspace:
+    image: wildlife-tracking-sim:x86
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: wildlife-tracking-sim-x86
+    command: ["sleep", "infinity"]
+    gpus: all
+    network_mode: bridge
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      HOME: /tmp
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+

@@ -1,0 +1,17 @@
+services:
+  workspace:
+    image: wildlife-tracking-sim:l4t
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.l4t
+    container_name: wildlife-tracking-sim-l4t
+    command: ["sleep", "infinity"]
+    runtime: nvidia
+    network_mode: bridge
+    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      HOME: /tmp
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+

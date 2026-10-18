@@ -1,0 +1,42 @@
+# 要件定義
+
+## 目的と範囲
+
+本システムは，3次元農場環境で鹿の追跡手法とカメラ配置手法を再現可能に比較するシミュレーション・ベンチマーク基盤である．主対象はJetson Orin Nano（JetPack 6系，ARM64）であり，x86_64 NVIDIA GPU搭載Linuxも対象とする．
+
+Phase 0は開発環境，ディレクトリ責務，共通契約，評価方針，拡張点の整備までを対象とする．Simulator，Tracker，配置法，行動モデル，Case，Scenarioの本実装は対象外である．
+
+## 機能要件
+
+- 鹿の移動，追跡，評価の基本座標は2Dとする．地形と遮蔽判定は3Dで扱う．
+- Simulator backendは`AnalyticBackend`と`GenesisBackend`を分離する．Genesisは任意拡張であり，初期環境の必須依存にしない．
+- カメラの位置，向き，視認距離，FOV，遮蔽条件を設定可能にする．視認距離の初期値は42 mとする．
+- 森林は地面から5 mまでの完全遮蔽領域とし，牧場内の森林も追跡対象領域に含める．
+- 建物は簡易3D形状と鹿の移動不可領域を表現する．
+- 観測はPerfect Observationのみとし，可視な鹿の真の2D位置を観測値として生成する．Noisy Observationは実装しない．
+- Trackerは非観測期間も個体および群れの状態予測を継続する．牧場境界による追跡終了判定にはTrackerの推定値を使う．
+- 大人・子供属性は`UNKNOWN`を許容する．
+- 確率分布は1 m，5 m，10 mなど設定可能なグリッド解像度で評価できるようにする．
+- 鹿の基本行動はリーダー主導の群れ行動とするが，具体的条件は実験ごとに定義する．
+- Datasetを生成・保存・再利用し，同一設定とseedから再現可能な結果を得る．
+
+## Ground Truth分離
+
+Ground Truthを参照できるのはSimulatorとEvaluatorだけである．Trackerへ真の個体ID，群れID，リーダー情報，未来位置を渡してはならない．観測間の関連付けに使う識別子は観測上の識別子であり，Simulator内部の真値識別子と同一であることを要求しない．
+
+## データ配置
+
+Caseの入力，派生地形，USD，Dataset，Runはすべて`cases/<case_id>/`に置く．`data/raw/`，`data/cases/`，ルートの`runs/`，独立した`notebooks/`は設けない．Phase 0では架空のCaseや実験データを作成しない．
+
+## 非機能要件
+
+- Python 3.10をJetsonとx86の共通基準とする．
+- 共通Python依存はルートの`requirements.txt`に集約し，GPU固有依存はDockerfileで管理する．
+- 交換可能な実装は共通契約に依存し，SimulatorやEvaluatorの内部実装へ依存しない．
+- 重要な計算式，座標変換，評価処理にはテストを用意する．
+- 既存Schemaと公開APIの後方互換性を維持する．互換性を破る変更はDecision Recordと移行方針を必要とする．
+
+## Phase 0完了時点の非対象
+
+Pythonパッケージ本体，Notebook，Caseデータ，追跡・配置・行動アルゴリズム，Camera Geometry，Noisy Observation，Genesisの導入およびGPU向けPyTorchの固定は未実装とする．
+
