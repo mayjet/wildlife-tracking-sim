@@ -27,7 +27,7 @@ cases/<case_id>/           Case単位の入力・生成物・結果
 | `field-environment` | 地形取得，人工地形，森林・建物・牧場領域の生成 | 鹿の行動，追跡評価 |
 | `field-sim` | 鹿の移動，群れ行動，可視判定，Perfect Observation，backend選択 | Trackerの推定，評価集計 |
 | `field-tracker` | 観測入力，共通API，Track管理，再利用可能な追跡処理 | Ground Truth参照，研究手法の固定 |
-| `field-campost` | カメラ配置の共通APIと配置結果の表現 | 特定の最適化手法の固定 |
+| `field-campost` | 固定Camera配置，terrain mesh，Layout I/O，USD出力，Genesis optional adapter | 配置最適化，可視・遮蔽判定 |
 | `field-benchmark` | Dataset生成・保存・再利用，追跡評価，配置評価 | Tracker内部状態の改変 |
 | `field-visualizer` | Rerun Webによる2D表示 | シミュレーション・評価ロジック |
 | `shepherd-contracts` | Case，観測，推定，配置，Dataset，Runの共通型 | 実行ロジック |
@@ -66,12 +66,13 @@ cases/<case_id>/
   landcover.tif
   traversability.tif
   farm_boundary.geojson
+  camera_layout.json
   environment.usd
   datasets/
   runs/
 ```
 
-`source/`は取得元データ，GeoTIFFとGeoJSONは正規化・派生データ，`environment.usd`は3D環境，`datasets/`は再利用可能な観測・真値，`runs/`は設定・推定・評価結果を保持する．個々の成果物の必須・任意区分はCase Schemaで定義する．
+`source/`は取得元データと入力設定のarchive，GeoTIFFとGeoJSONは正規化・派生データ，`camera_layout.json`は観測計算用の共通`CameraLayout`，`environment.usd`は3D表示・backend連携用環境，`datasets/`は再利用可能な観測・真値，`runs/`は設定・推定・評価結果を保持する．必須資産は`case.yaml`，`terrain.tif`，`farm_boundary.geojson`，`datasets/`，`runs/`である．未使用sourceや未取得地物の空directoryは作らない．
 
 ## 依存方向
 
@@ -103,3 +104,71 @@ shepherd-contracts -X-> workspace, field-*, Simulator実装, Evaluator実装
 | `protocols` | Tracker，配置，行動モデルの拡張API |
 
 `ground_truth`をTrackerや配置APIの入力経路へ接続しない．例外はSimulator内部で使う`DeerBehaviorModel`だけであり，その入力環境は`LocalEnvironmentView`に制限する．
+
+## Phase 2環境層
+
+`field-environment`は次の依存方向を持つ．
+
+```text
+workspace/00_environment.ipynb
+              |
+              v
+      field-environment ----> shepherd-contracts
+         |      |   |
+         |      |   +-------> Matplotlib（2D表示のみ）
+         |      +-----------> Rasterio / Shapely（I/O・Polygon）
+         +------------------> NumPy（Heightmap）
+```
+
+Notebookは設定とAPI呼び出しだけを行う．Heightmap生成，検証，GeoTIFF/GeoJSON/YAML保存，読み込みは`field-environment`が担当する．`field-environment`はSimulator，Tracker，Benchmark，Genesisへ依存しない．
+
+### Phase 2 Case文書
+
+`case.yaml`は既存`CaseSpec`を`case`fieldに保持し，Phase 2固有の`terrain` metadataと`generation` metadataを併記する．これによりContractsを破壊的に変更せず，セルサイズ，配列shape，origin，生成手法・parameter・seedを保存する．`CaseSpec.environment.terrain`と`CaseSpec.farm_boundary.data_ref`は各成果物の相対pathを示す．
+
+memory上のHeightmapは`values[y, x]`で，`values[0, 0]`は南西側の最初のcell中心である．GeoTIFFは標準的なnorth-up row順へ上下反転して保存し，読み込み時にmemory規則へ戻す．
+
+## Phase 3 3D・Camera層
+
+```text
+workspace/00_environment.ipynb
+              |
+              v
+       field-campost ----------------> shepherd-contracts
+          |        |                         CameraSpec / CameraLayout
+          |        +----------------> field-environment
+          |                                  Heightmap / Case I/O
+          +--------------------------> NumPy / Matplotlib
+          |
+          +---- optional -----------> genesis-world + usd-core
+```
+
+`heightmap_to_mesh()`はHeightmapの各cell中心を1頂点として，`values[y, x]`と同じrow-major順で頂点を生成する．隣接する4頂点から2三角形を作り，+Z側から見て反時計回りになる面順序とvertex normalを保存する．このPhaseではcell境界の補間やmesh decimationを行わない．
+
+`FixedCameraPlacement`は`(x, y)`と地表面からの高さを受け，`Heightmap.elevation_at()`から`CameraSpec.position.z_m`を求める．保存後は`CameraSpec`の絶対ENU座標を正とする．`camera_layout.json`はContracts JSONそのもので，`environment.usd`内のCamera primは表示用である．観測計算はUSD Cameraではなく`camera_layout.json`を読む．
+
+USD stageは`metersPerUnit=1`，`upAxis=Z`，default prim `/World`とする．Terrain Meshはcell中心座標を内包する．ContractsのCamera body frameは+Xを視線方向，+Yを左，+Zを上とし，USD Cameraの-X/+Y/-Z規則へ表示transformで変換する．元のyaw/pitch/roll，FOV，距離，観測間隔もcustom attributeとして保持し，再読み込み時に`CameraLayout`と照合する．
+
+ASCII USDA writerはNumPyだけで動作し，Jetson上のCase生成を`usd-core`に依存させない．`pxr`がある環境では追加validationを行える．Genesis連携はlazy importし，現行APIの`gs.morphs.USD`と`scene.add_stage()`を使う．`genesis-world`または`usd-core`が無い環境ではCase生成を失敗させず，利用不可理由を返す．
+
+## Phase 4〜5 地理情報・共通Case層
+
+`EnvironmentConfig`はYAMLの`terrain.source`をdiscriminatorとして`synthetic`，`alos`，`gsi`，`file`へ分岐する．adapterは`TerrainSourceResult`へ正規化され，`create_case_from_terrain_source()`以降は取得元に分岐しない．地理Caseは中心緯度経度を原点とするWGS84 local azimuthal equidistant投影を使用し，`LocalCoordinateSystem`へEPSG:4326，投影定義，基準点，鉛直基準を保存する．
+
+AW3D30 adapterはJAXA Earth API `JAXA.EORC_ALOS.PRISM_AW3D30.v3.2_global`の`DSM` bandを取得する．GSI adapterは公式PNG tileの符号付き0.01 m encodingを復号し，優先datasetから欠損cellを補う．GeoTIFF adapterは入力CRSを必須とする．取得元はnorth-up，memory上は南西cell中心を`values[0,0]`とするため，共通reprojection境界で1回だけrowを反転する．
+
+Case操作は`create`，`load`，`edit`を区別する．`create`は既存Caseを拒否し，`load`は通信しない．`edit`はCase全体を一時directoryへcopyしてから置換し，対象外のsource，Camera，USD，Dataset，Runを保持する．`FeatureLayerStatus`は未取得と空集合を区別し，`traversability.tif`は`0=unknown, 1=traversable, 2=difficult, 3=prohibited`とする．Phase 5のUSD森林・建物はPolygonのbounding boxによる簡易Cubeであり，遮蔽計算には使わない．
+
+## Phase 6 最小Simulator層
+
+```text
+workspace/04_simulation.ipynb
+              |
+              v
+         field-sim ----------> field-environment ----------> shepherd-contracts
+          motion/time             Case/Heightmap              GroundTruth/Manifest
+              |
+              +-------------> cases/<case_id>/datasets/<dataset_id>/
+```
+
+`SimulationConfig`はCase ID，Dataset ID，seed，duration，step，個体属性とmotionを保持する．`simulate()`はmeshの三角形分割と同じ面上線形補間でzを算出し，時刻0から終了時刻まで`GroundTruthFrame`を生成する．Ground Truthは`ground_truth.parquet`へ保存し，`DatasetManifest`にはCase hash，motion，地表補間法，Observation未生成状態を記録する．Phase 6は観測ファイルを生成せず，Trackerへの経路を持たない．

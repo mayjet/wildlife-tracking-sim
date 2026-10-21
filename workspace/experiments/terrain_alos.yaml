@@ -1,0 +1,26 @@
+case_id: alos_001
+mode: create
+
+terrain:
+  source: alos
+  center_lat: null
+  center_lon: null
+  size_m: 3000
+  cell_size_m: 10
+  missing_data: nearest
+  offline: false
+
+farm:
+  boundary_type: rectangle
+  size_m: 2000
+
+features:
+  buildings:
+    status: unavailable
+    source: not acquired
+  forest:
+    status: unavailable
+    source: not acquired
+  difficult_slope_deg: 35
+
+cameras: []

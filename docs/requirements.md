@@ -4,7 +4,7 @@
 
 本システムは，3次元農場環境で鹿の追跡手法とカメラ配置手法を再現可能に比較するシミュレーション・ベンチマーク基盤である．主対象はJetson Orin Nano（JetPack 6系，ARM64）であり，x86_64 NVIDIA GPU搭載Linuxも対象とする．
 
-Phase 0は開発環境，ディレクトリ責務，共通契約，評価方針，拡張点の整備までを対象とする．Simulator，Tracker，配置法，行動モデル，Case，Scenarioの本実装は対象外である．
+開発はPhase 0〜12で進める．Phase 0〜6では，開発環境，共通Contracts，人工・公開標高・GeoTIFFの共通Case，固定Camera・terrain mesh・USD，最小Ground Truth Simulatorまでを完成させた．Phase 7以降の観測，Tracker，Benchmark，群れ行動，配置最適化には進まない．
 
 ## 機能要件
 
@@ -19,6 +19,17 @@ Phase 0は開発環境，ディレクトリ責務，共通契約，評価方針�
 - 確率分布は1 m，5 m，10 mなど設定可能なグリッド解像度で評価できるようにする．
 - 鹿の基本行動はリーダー主導の群れ行動とするが，具体的条件は実験ごとに定義する．
 - Datasetを生成・保存・再利用し，同一設定とseedから再現可能な結果を得る．
+- 人工地形はFlat，Hills，Valley，Ridgeを生成でき，生成条件とseedをCaseへ記録する．
+- Heightmapは`heightmap[y_index, x_index]`とし，最初のcell中心をlocal ENU上のoriginとして管理する．
+- Case保存は既存Caseを暗黙に上書きせず，Case IDと相対pathから保存root外へアクセスさせない．
+- Terrain meshの各頂点はHeightmapのcell中心`(x, y, elevation)`に対応し，面は南西から北東へ一貫した反時計回りで三角形化する．
+- 固定Cameraは地表面からの設置高を指定し，永続化時は共通`CameraLayout`の絶対ENU 3D位置へ変換する．
+- USDはm単位・Z-upで`cases/<case_id>/environment.usd`へ保存し，`camera_layout.json`の観測用CameraとUSDの可視化用Cameraを区別する．
+- `terrain.source`は`synthetic`，`alos`，`gsi`，`file`を区別し，すべて同じ`EnvironmentCase`へ変換する．入力条件は`workspace/experiments/*.yaml`，確定結果はCaseの`case.yaml`へ分離する．
+- ALOS AW3D30をDSMとして記録し，国土地理院tileをDEMとして記録する．出力cell sizeを元データの実効解像度と同一視しない．NoDataを0 mへ置換しない．
+- 建物・森林は`unavailable`，`empty`，`available`を区別する．建物は移動禁止，森林は移動可能を原則とし，森林のUSD表示高は5 mとする．
+- 最小SimulatorはCase取得元を知らず，静止・等速直線・時刻付きWaypointを同じAPIで実行する．牧場境界外は許容し，地形mesh外，欠損標高，建物・禁止cellは拒否する．
+- Phase 6 Datasetは`manifest.json`と`ground_truth.parquet`を保存する．ObservationはPhase 7まで生成せず，manifestに未生成状態を記録する．
 
 ## Ground Truth分離
 
@@ -36,7 +47,6 @@ Caseの入力，派生地形，USD，Dataset，Runはすべて`cases/<case_id>/`
 - 重要な計算式，座標変換，評価処理にはテストを用意する．
 - 既存Schemaと公開APIの後方互換性を維持する．互換性を破る変更はDecision Recordと移行方針を必要とする．
 
-## Phase 0完了時点の非対象
+## Phase 6完了時点の非対象
 
-Pythonパッケージ本体，Notebook，Caseデータ，追跡・配置・行動アルゴリズム，Camera Geometry，Noisy Observation，Genesisの導入およびGPU向けPyTorchの固定は未実装とする．
-
+OSM/PLATEAU/JAXA土地被覆の自動取得，鹿の群れ・意思決定，Camera観測・遮蔽・ray tracing，Tracker，評価計算，Rerun，配置探索，Noisy Observationは未実装とする．Genesis描画adapterは実装済みだが，`genesis-world`と`usd-core`を共通必須依存にはせず，利用可能な環境だけで実行する．

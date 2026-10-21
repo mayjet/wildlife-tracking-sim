@@ -1,0 +1,32 @@
+case_id: gsi_001
+mode: create
+
+terrain:
+  source: gsi
+  center_lat: null
+  center_lon: null
+  size_m: 3000
+  cell_size_m: 10
+  missing_data: nearest
+  offline: false
+  gsi_datasets:
+    - dem1a_png
+    - dem5a_png
+    - dem5b_png
+    - dem5c_png
+    - dem_png
+
+farm:
+  boundary_type: rectangle
+  size_m: 2000
+
+features:
+  buildings:
+    status: unavailable
+    source: not acquired
+  forest:
+    status: unavailable
+    source: not acquired
+  difficult_slope_deg: 35
+
+cameras: []

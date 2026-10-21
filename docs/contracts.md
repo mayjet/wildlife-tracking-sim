@@ -19,6 +19,8 @@
 
 `CaseSpec`はCase ID，座標系，環境データ参照，牧場境界参照とboundsを持つ．参照先は`cases/<case_id>/`からの相対pathで，絶対pathと`..`を拒否する．`CameraSpec`は3D位置，姿勢，水平・垂直FOV，最大観測距離，観測間隔を持つ．42 mは`DEFAULT_MAX_OBSERVATION_DISTANCE_M`という標準設定であり，Schema fieldの暗黙defaultではない．`CameraLayout`は一意なcamera IDを持つカメラ集合である．
 
+Phase 3では`FixedCameraPlacement`が地表基準の設置条件を`CameraSpec`へ変換する．永続化形式`camera_layout.json`は`CameraLayout.model_dump_json()`のJSONであり，独自のCamera Schemaを追加しない．`CaseSpec.environment.environment_usd`は`environment.usd`を参照する．Camera Layout pathはCase内の固定規約`camera_layout.json`とし，Phase 1 Contractsにはfieldを追加しない．
+
 ```python
 camera = CameraSpec(
     camera_id="cam-01",
@@ -30,6 +32,19 @@ camera = CameraSpec(
     observation_interval_s=2.0,
 )
 layout = CameraLayout(layout_id="layout-a", cameras=(camera,))
+```
+
+```python
+placement = FixedCameraPlacement(
+    camera_id="cam-01",
+    x_m=20.0,
+    y_m=10.0,
+    height_above_ground_m=3.0,
+    orientation=CameraOrientation(yaw_rad=0.0, pitch_rad=0.2, roll_rad=0.0),
+    horizontal_fov_rad=1.57,
+    vertical_fov_rad=1.05,
+)
+layout = create_fixed_camera_layout(heightmap, [placement], layout_id="layout-a")
 ```
 
 `CaseSpec`は次のように構成する．
@@ -158,6 +173,17 @@ run = RunManifest(
 restored = DatasetManifest.model_validate_json(dataset.model_dump_json())
 ```
 
+Phase 6は既存`GroundTruthState`，`GroundTruthFrame`，`DatasetManifest`を変更せず使用する．`field-sim`の`SimulationConfig`は実行設定でありContracts Schemaではない．保存構造は次のとおりである．
+
+```text
+cases/<case_id>/datasets/<dataset_id>/
+  manifest.json
+  simulation_config.json
+  ground_truth.parquet
+```
+
+`ground_truth.parquet`は時刻，真の個体ID，任意の真の群れID・leader属性，ENU 3D位置，2D速度，年齢区分を列として持つ．Phase 6ではObservationを生成しないため，`observation_data_ref`は将来の予約path，`scenario_config.observation_data_status`は`not_generated_phase6`とする．TrackerへmanifestのGround Truth参照を入力してはならない．
+
 ## Workspace API
 
 `Tracker`，`CameraPlacementMethod`，`DeerBehaviorModel`は`typing.Protocol`による構造的interfaceで，継承を要求しない．
@@ -181,4 +207,3 @@ Trackerの`step()`は観測数0でも毎simulation step呼び出す．配置法�
 ## Versioning
 
 Phase 1の初期公開versionはpackage `0.1.0`，永続化Schema例は`1.0`とする．optional fieldの追加は後方互換として扱えるが，field削除・改名・意味変更はmajor schema version変更，Decision Record，移行手順を必要とする．
-

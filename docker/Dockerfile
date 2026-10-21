@@ -20,6 +20,12 @@ COPY requirements.txt /tmp/requirements.txt
 RUN python3 -m pip install --upgrade pip \
     && python3 -m pip install -r /tmp/requirements.txt
 
+COPY libs/shepherd-contracts /tmp/shepherd-contracts
+COPY packages/field-environment /tmp/field-environment
+COPY packages/field-campost /tmp/field-campost
+COPY packages/field-sim /tmp/field-sim
+RUN python3 -m pip install /tmp/shepherd-contracts /tmp/field-environment /tmp/field-campost /tmp/field-sim \
+    && rm -rf /tmp/shepherd-contracts /tmp/field-environment /tmp/field-campost /tmp/field-sim
+
 WORKDIR /workspace
 CMD ["sleep", "infinity"]
-

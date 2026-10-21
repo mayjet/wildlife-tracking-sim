@@ -1,0 +1,24 @@
+case_id: imported_001
+mode: create
+
+terrain:
+  source: file
+  path: /path/to/elevation.tif
+  cell_size_m: 10
+  size_m: 3000
+  missing_data: nearest
+
+farm:
+  boundary_type: rectangle
+  size_m: 2000
+
+features:
+  buildings:
+    status: unavailable
+    source: not acquired
+  forest:
+    status: unavailable
+    source: not acquired
+  difficult_slope_deg: 35
+
+cameras: []

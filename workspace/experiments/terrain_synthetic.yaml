@@ -1,0 +1,35 @@
+case_id: synthetic_hills_001
+mode: create
+
+terrain:
+  source: synthetic
+  type: hills
+  size_m: 3000
+  cell_size_m: 10
+  relief_m: 120
+  seed: 42
+
+farm:
+  boundary_type: rectangle
+  size_m: 2000
+
+features:
+  buildings:
+    status: unavailable
+    source: not acquired
+  forest:
+    status: unavailable
+    source: not acquired
+  difficult_slope_deg: 35
+
+cameras:
+  - camera_id: camera-west
+    x_m: -750
+    y_m: 0
+    height_above_ground_m: 4
+    yaw_deg: 0
+    pitch_deg: 8
+    horizontal_fov_deg: 80
+    vertical_fov_deg: 50
+    max_observation_distance_m: 42
+    observation_interval_s: 1
