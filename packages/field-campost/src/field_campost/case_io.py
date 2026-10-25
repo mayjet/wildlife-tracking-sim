@@ -4,12 +4,19 @@ from dataclasses import replace
 from pathlib import Path
 
 import yaml
-from field_environment import EnvironmentCase, load_case, resolve_case_path
+from field_environment import (
+    EnvironmentCase,
+    crop_heightmap,
+    load_case,
+    resolve_case_path,
+    scene_crop_geometry,
+)
 from shepherd_contracts import CameraLayout
 
 from .cameras import load_camera_layout, save_camera_layout
 from .mesh import heightmap_to_mesh, validate_mesh_against_heightmap
 from .usd import read_environment_usd, write_environment_usd
+from .summary import build_field_summary, save_field_summary
 
 CAMERA_LAYOUT_FILENAME = "camera_layout.json"
 ENVIRONMENT_USD_FILENAME = "environment.usd"
@@ -53,22 +60,36 @@ def save_case_scene(
             "Phase 3 Case artifacts already exist: " + ", ".join(str(path) for path in existing)
         )
     for camera in layout.cameras:
-        ground_z_m = environment_case.heightmap.elevation_at(
+        ground_z_m = environment_case.heightmap.surface_elevation_at(
             camera.position.x_m, camera.position.y_m
         )
         if camera.position.z_m <= ground_z_m:
             raise ValueError(f"camera {camera.camera_id!r} must be above the terrain surface")
-    mesh = heightmap_to_mesh(environment_case.heightmap)
-    validate_mesh_against_heightmap(mesh, environment_case.heightmap)
+    crop_geometry = scene_crop_geometry(environment_case)
+    scene_heightmap = crop_heightmap(environment_case.heightmap, crop_geometry)
+    mesh = heightmap_to_mesh(scene_heightmap)
+    validate_mesh_against_heightmap(mesh, scene_heightmap)
     save_camera_layout(layout, layout_path, overwrite=overwrite)
     try:
         write_environment_usd(
             mesh,
             layout,
             usd_path,
-            heightmap=environment_case.heightmap,
+            heightmap=scene_heightmap,
             buildings=environment_case.buildings,
             forest=environment_case.forest,
+            facility_buildings=environment_case.facility_buildings,
+            scene_crop=crop_geometry,
+            forest_boundary_smoothing_m=(
+                float(
+                    environment_case.scene_crop.features[0]
+                    .get("properties", {})
+                    .get("forest_boundary_smoothing_m", 0.0)
+                )
+                if environment_case.scene_crop is not None
+                and environment_case.scene_crop.features
+                else 0.0
+            ),
             overwrite=overwrite,
         )
         summary = read_environment_usd(usd_path)
@@ -77,6 +98,10 @@ def save_case_scene(
         if summary.meters_per_unit != 1.0 or summary.up_axis != "Z":
             raise ValueError("USD coordinate metadata is invalid")
         _update_case_usd_reference(case_directory, environment_case)
+        save_field_summary(
+            build_field_summary(environment_case, mesh, usd_path=usd_path),
+            case_directory / "field_summary.json",
+        )
     except Exception:
         if not existing:
             layout_path.unlink(missing_ok=True)

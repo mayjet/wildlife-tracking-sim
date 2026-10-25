@@ -55,8 +55,59 @@ def test_load_mode_forbids_regeneration_settings() -> None:
         )
 
 
+def test_detection_is_available_only_for_create_or_edit() -> None:
+    configured = EnvironmentConfig.model_validate(
+        {
+            "case_id": "existing",
+            "mode": "edit",
+            "detection": {
+                "imagery": {"source": "gsi_seamlessphoto", "zoom": 17},
+                "landcover": {"source": "esa_worldcover", "year": 2021},
+                "buildings": {"source": "osm"},
+            },
+        }
+    )
+    assert configured.detection.imagery.output_cell_size_m == 1.0
+    with pytest.raises(ValueError, match="load mode"):
+        EnvironmentConfig.model_validate(
+            {"case_id": "existing", "mode": "load", "detection": {}}
+        )
+
+
 def test_invalid_yaml_is_reported_as_configuration_error(tmp_path: Path) -> None:
     config_path = tmp_path / "invalid.yaml"
     config_path.write_text("case_id: broken\nmode: create\n", encoding="utf-8")
     with pytest.raises(EnvironmentConfigurationError):
         load_environment_config(config_path)
+
+
+def test_scene_crop_configuration_is_loaded(tmp_path: Path) -> None:
+    config_path = tmp_path / "scene.yaml"
+    config_path.write_text(
+        """
+case_id: scene-case
+mode: create
+terrain:
+  source: synthetic
+  type: flat
+  size_m: 1000
+  cell_size_m: 10
+farm:
+  boundary_type: rectangle
+  size_m: 400
+scene:
+  forest_height_m: 10
+  forest_boundary_smoothing_m: 5
+  crop:
+    shape: square
+    scale: 1.5
+    minimum_margin_m: 100
+""",
+        encoding="utf-8",
+    )
+
+    config, _ = load_environment_config(config_path, start=tmp_path)
+
+    assert config.scene is not None
+    assert config.scene.forest_height_m == 10
+    assert config.scene.crop.scale == 1.5

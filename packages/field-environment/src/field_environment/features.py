@@ -19,6 +19,18 @@ from .terrain.heightmap import TerrainGridSpec
 from .terrain.quality import slope_degrees
 
 
+FeatureLayerType = Literal[
+    "buildings",
+    "forest",
+    "pasture_candidates",
+    "farm_complex_candidates",
+    "monitoring_area",
+    "facility_buildings",
+    "excluded_buildings",
+    "scene_crop",
+]
+
+
 class FeatureLayerStatus(str, Enum):
     UNAVAILABLE = "unavailable"
     EMPTY = "empty"
@@ -27,7 +39,7 @@ class FeatureLayerStatus(str, Enum):
 
 @dataclass(frozen=True)
 class PolygonFeatureLayer:
-    layer_type: Literal["buildings", "forest"]
+    layer_type: FeatureLayerType
     status: FeatureLayerStatus
     coordinate_system_name: str
     features: tuple[dict[str, Any], ...] = ()
@@ -104,7 +116,7 @@ class TraversabilityMap:
 def load_polygon_feature_layer(
     path: str | Path,
     *,
-    layer_type: Literal["buildings", "forest"],
+    layer_type: FeatureLayerType,
     coordinate_system: LocalCoordinateSystem,
     source: str | None = None,
     assumed_height_m: float | None = None,
@@ -154,7 +166,7 @@ def load_polygon_feature_layer(
 
 def create_feature_layer(
     *,
-    layer_type: Literal["buildings", "forest"],
+    layer_type: FeatureLayerType,
     status: FeatureLayerStatus,
     coordinate_system_name: str,
     source: str | None = None,

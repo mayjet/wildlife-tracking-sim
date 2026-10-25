@@ -39,7 +39,7 @@ def create_fixed_camera_layout(
 ) -> CameraLayout:
     cameras = []
     for placement in placements:
-        ground_z_m = heightmap.elevation_at(placement.x_m, placement.y_m)
+        ground_z_m = heightmap.surface_elevation_at(placement.x_m, placement.y_m)
         cameras.append(
             CameraSpec(
                 camera_id=placement.camera_id,

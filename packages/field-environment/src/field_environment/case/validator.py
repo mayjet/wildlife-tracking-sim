@@ -41,9 +41,20 @@ def validate_environment_case(environment_case: EnvironmentCase) -> None:
             errors.append("CaseSpec.environment.traversability must reference traversability.tif")
         if environment_case.traversability.grid != environment_case.heightmap.grid:
             errors.append("traversability grid must match the Heightmap grid")
+    if environment_case.landcover is not None:
+        if case_spec.environment.landcover != "landcover.tif":
+            errors.append("CaseSpec.environment.landcover must reference landcover.tif")
+        if environment_case.landcover.grid != environment_case.heightmap.grid:
+            errors.append("landcover grid must match the Heightmap grid")
     for layer_name, layer in (
         ("buildings", environment_case.buildings),
         ("forest", environment_case.forest),
+        ("pasture_candidates", environment_case.pasture_candidates),
+        ("farm_complex_candidates", environment_case.farm_complex_candidates),
+        ("monitoring_area", environment_case.monitoring_area),
+        ("facility_buildings", environment_case.facility_buildings),
+        ("excluded_buildings", environment_case.excluded_buildings),
+        ("scene_crop", environment_case.scene_crop),
     ):
         if layer is not None and layer.coordinate_system_name != coordinate_system.name:
             errors.append(f"{layer_name} and CaseSpec coordinate systems must match")
@@ -53,6 +64,13 @@ def validate_environment_case(environment_case: EnvironmentCase) -> None:
         environment_case.farm_boundary.validate_within(environment_case.heightmap.bounds)
     except ValueError as error:
         errors.append(str(error))
+    if environment_case.scene_crop is not None and environment_case.scene_crop.features:
+        from shapely.geometry import box, shape
+
+        terrain = environment_case.heightmap.bounds
+        terrain_polygon = box(terrain.min_x_m, terrain.min_y_m, terrain.max_x_m, terrain.max_y_m)
+        if not terrain_polygon.covers(shape(environment_case.scene_crop.features[0]["geometry"])):
+            errors.append("scene crop must be fully contained in the terrain extent")
     if not _bounds_match(case_spec.farm_boundary.bounds, environment_case.farm_boundary.bounds):
         errors.append("CaseSpec farm boundary bounds do not match the Polygon")
     if errors:

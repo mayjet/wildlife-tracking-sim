@@ -113,6 +113,61 @@ class EnvironmentFeaturesConfig(BaseModel):
     difficult_slope_deg: float | None = Field(default=None, gt=0.0, lt=90.0)
 
 
+class GsiImageryConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: Literal["gsi_seamlessphoto"] = "gsi_seamlessphoto"
+    zoom: int = Field(default=17, ge=14, le=18)
+    output_cell_size_m: float = Field(default=1.0, gt=0.0)
+    offline: bool = False
+
+
+class WorldCoverConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: Literal["esa_worldcover"] = "esa_worldcover"
+    year: Literal[2021] = 2021
+    offline: bool = False
+
+
+class OsmBuildingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    source: Literal["osm", "gsi_vector", "gsi_vector_osm"] = "gsi_vector_osm"
+    overpass_url: str = "https://overpass-api.de/api/interpreter"
+    gsi_zoom: Literal[16] = 16
+    assumed_height_m: float | None = Field(default=None, gt=0.0)
+    offline: bool = False
+
+
+class PastureDetectionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    open_landcover_classes: tuple[int, ...] = (30, 40, 60)
+    maximum_slope_deg: float = Field(default=20.0, ge=0.0, lt=90.0)
+    minimum_area_m2: float = Field(default=1000.0, gt=0.0)
+    bridge_gap_m: float = Field(default=40.0, ge=0.0)
+    enclosed_hole_maximum_area_m2: float | None = Field(default=None, ge=0.0)
+    facility_maximum_distance_m: float = Field(default=40.0, ge=0.0)
+    monitoring_closing_m: float = Field(default=80.0, ge=0.0)
+    monitoring_buffer_m: float = Field(default=10.0, ge=0.0)
+    selection_anchor_x_m: float = 0.0
+    selection_anchor_y_m: float = 0.0
+    confirm_monitoring_boundary: bool = False
+
+
+class EnvironmentDetectionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    imagery: GsiImageryConfig = Field(default_factory=GsiImageryConfig)
+    landcover: WorldCoverConfig = Field(default_factory=WorldCoverConfig)
+    buildings: OsmBuildingConfig = Field(default_factory=OsmBuildingConfig)
+    pasture: PastureDetectionConfig = Field(default_factory=PastureDetectionConfig)
+    forest_classes: tuple[int, ...] = (10, 95)
+    forest_minimum_area_m2: float = Field(default=100.0, gt=0.0)
+    difficult_slope_deg: float | None = Field(default=35.0, gt=0.0, lt=90.0)
+
+
 class FixedCameraConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
 
@@ -138,6 +193,27 @@ class FixedCameraConfig(BaseModel):
         )
 
 
+class SceneCropConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+
+    enabled: bool = True
+    source: Literal["farm_boundary"] = "farm_boundary"
+    shape: Literal["square", "rectangle"] = "square"
+    scale: float = Field(default=1.5, ge=1.0)
+    minimum_margin_m: float = Field(default=100.0, ge=0.0)
+    center_offset_x_m: float = 0.0
+    center_offset_y_m: float = 0.0
+    snap_to_terrain_grid: bool = True
+
+
+class SceneConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+
+    crop: SceneCropConfig = Field(default_factory=SceneCropConfig)
+    forest_height_m: float = Field(default=10.0, gt=0.0)
+    forest_boundary_smoothing_m: float = Field(default=5.0, ge=0.0)
+
+
 class EnvironmentConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -147,6 +223,8 @@ class EnvironmentConfig(BaseModel):
     terrain: TerrainConfig | None = None
     farm: FarmConfig | None = None
     features: EnvironmentFeaturesConfig | None = None
+    detection: EnvironmentDetectionConfig | None = None
+    scene: SceneConfig | None = None
     cameras: tuple[FixedCameraConfig, ...] = ()
 
     @model_validator(mode="after")
@@ -155,13 +233,21 @@ class EnvironmentConfig(BaseModel):
             raise ValueError("create mode requires terrain and farm settings")
         if self.mode is CaseMode.LOAD and any(
             value is not None
-            for value in (self.terrain, self.farm, self.features, self.source_case_id)
+            for value in (
+                self.terrain,
+                self.farm,
+                self.features,
+                self.detection,
+                self.source_case_id,
+            )
         ):
             raise ValueError("load mode accepts only case_id and display settings")
         if self.mode is CaseMode.LOAD and self.cameras:
             raise ValueError("load mode does not modify camera settings")
         if self.mode is CaseMode.EDIT and self.terrain is not None:
             raise ValueError("edit mode does not regenerate terrain; omit terrain settings")
+        if self.features is not None and self.detection is not None:
+            raise ValueError("features and detection cannot be applied in the same operation")
         if self.source_case_id == self.case_id:
             raise ValueError("source_case_id must differ from case_id when cloning a Case")
         return self

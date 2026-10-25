@@ -104,6 +104,48 @@ def _write_traversability(environment_case: EnvironmentCase, destination: Path) 
         )
 
 
+def _write_raster_layer(environment_case: EnvironmentCase, layer, destination: Path) -> None:
+    bounds = layer.grid.bounds
+    transform = from_origin(
+        bounds.min_x_m,
+        bounds.max_y_m,
+        layer.grid.cell_size_m,
+        layer.grid.cell_size_m,
+    )
+    raster_options = {}
+    if environment_case.case_spec.coordinate_system.projected_crs:
+        raster_options["crs"] = environment_case.case_spec.coordinate_system.projected_crs
+    if layer.layer_type == "imagery":
+        count = 3
+        values = layer.values[::-1, :, :].transpose(2, 0, 1)
+        options = {"photometric": "RGB", "compress": "deflate"}
+    else:
+        count = 1
+        values = layer.values[::-1, :][None, :, :]
+        options = {"compress": "deflate", "nodata": 0}
+    with rasterio.open(
+        destination,
+        "w",
+        driver="GTiff",
+        width=layer.grid.width_cells,
+        height=layer.grid.height_cells,
+        count=count,
+        dtype="uint8",
+        transform=transform,
+        **options,
+        **raster_options,
+    ) as dataset:
+        dataset.write(values)
+        dataset.update_tags(
+            source=layer.source,
+            attribution=layer.attribution,
+            source_resolution_m=(
+                "unknown" if layer.source_resolution_m is None else layer.source_resolution_m
+            ),
+            memory_origin="south-west-cell-center",
+        )
+
+
 def _write_case_contents(environment_case: EnvironmentCase, destination: Path) -> None:
     _write_heightmap(environment_case, destination / "terrain.tif")
     (destination / "farm_boundary.geojson").write_text(
@@ -113,10 +155,25 @@ def _write_case_contents(environment_case: EnvironmentCase, destination: Path) -
     for layer, filename in (
         (environment_case.buildings, "buildings.geojson"),
         (environment_case.forest, "forest.geojson"),
+        (environment_case.pasture_candidates, "pasture_candidates.geojson"),
+        (environment_case.farm_complex_candidates, "farm_complex_candidates.geojson"),
+        (environment_case.monitoring_area, "monitoring_area.geojson"),
+        (environment_case.facility_buildings, "facility_buildings.geojson"),
+        (environment_case.excluded_buildings, "excluded_buildings.geojson"),
+        (environment_case.scene_crop, "scene_crop.geojson"),
     ):
         target = destination / filename
         if layer is not None and layer.status.value != "unavailable":
             target.write_text(json.dumps(layer.to_geojson(), indent=2), encoding="utf-8")
+        else:
+            target.unlink(missing_ok=True)
+    for layer, filename in (
+        (environment_case.imagery, "imagery_rgb.tif"),
+        (environment_case.landcover, "landcover.tif"),
+    ):
+        target = destination / filename
+        if layer is not None:
+            _write_raster_layer(environment_case, layer, target)
         else:
             target.unlink(missing_ok=True)
     if environment_case.traversability is not None:

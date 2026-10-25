@@ -3,7 +3,8 @@ FROM nvidia/cuda:12.6.3-runtime-ubuntu22.04
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/workspace/libs/shepherd-contracts/src:/workspace/packages/field-environment/src:/workspace/packages/field-campost/src:/workspace/packages/field-sim/src
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

@@ -65,7 +65,7 @@
 - **目的**：実地形，森林，建物，牧場境界，USDを統合したCaseを完成させる．
 - **編集対象**：`field-environment`，Case資産，環境Notebook．
 - **依存関係**：Phase 3の3D/USD，Phase 4のALOS Heightmap．
-- **完了条件**：人工・実地形を共通Caseへ保存し，森林・建物の取得状態，traversability，境界，terrain mesh，USDの整合性を検証する．森林・建物の自動公開データ取得は後続拡張とする．
+- **完了条件**：人工・実地形を共通Caseへ保存し，森林・建物の取得状態，traversability，牧場候補・監視境界，terrain mesh，USDの整合性を検証する．公開土地被覆と建物外周を取得し，判定工程を個別画像と処理記録へ保存する．
 - **引き渡し**：Simulatorが消費できる実地形Case．
 
 ## Phase 6：シミュレーション基盤

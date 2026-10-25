@@ -21,6 +21,7 @@ def test_case_scene_round_trip(tmp_path, environment_case, camera_layout):
     assert read_environment_usd(usd_path).layout == camera_layout
     loaded_case = load_case(tmp_path, environment_case.case_spec.case_id)
     assert loaded_case.case_spec.environment.environment_usd == "environment.usd"
+    assert (tmp_path / environment_case.case_spec.case_id / "field_summary.json").is_file()
 
 
 def test_case_scene_does_not_overwrite_implicitly(tmp_path, environment_case, camera_layout):

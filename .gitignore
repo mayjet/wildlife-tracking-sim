@@ -9,3 +9,5 @@ dist/
 .agents/
 .codex/
 
+cases/*
+!cases/.gitkeep

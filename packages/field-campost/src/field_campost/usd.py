@@ -8,52 +8,152 @@ from pathlib import Path
 from typing import TextIO
 
 import numpy as np
-from shapely.geometry import shape
 from shepherd_contracts import CameraLayout, CameraOrientation, CameraSpec, Position3D
 
 from .cameras import camera_forward_vector
 from .mesh import TerrainMesh
+from .prisms import iter_layer_polygons, iter_polygons, layer_union, polygon_to_prism_mesh
 
 
-def _write_feature_boxes(stream, layer, heightmap, *, scope_name: str, default_height_m: float | None):
+def _elevation_inside_bounds(heightmap, x_m: float, y_m: float) -> float:
+    min_x_m = heightmap.grid.origin.x_m
+    min_y_m = heightmap.grid.origin.y_m
+    max_x_m = min_x_m + (heightmap.grid.width_cells - 1) * heightmap.grid.cell_size_m
+    max_y_m = min_y_m + (heightmap.grid.height_cells - 1) * heightmap.grid.cell_size_m
+    clamped_x_m = min(max(x_m, min_x_m), max_x_m)
+    clamped_y_m = min(max(y_m, min_y_m), max_y_m)
+    return heightmap.surface_elevation_at(clamped_x_m, clamped_y_m)
+
+
+def _write_prism_scope(
+    stream,
+    layer,
+    heightmap,
+    *,
+    scope_name: str,
+    prim_prefix: str,
+    source_layer: str,
+    display_color: tuple[float, float, float],
+    default_height_m: float,
+    follow_terrain: bool,
+    subtract=None,
+    clip=None,
+    geometry_override=None,
+) -> None:
     if layer is None or layer.status.value != "available" or heightmap is None:
         return
+    polygons = (
+        [(polygon, {}) for polygon in iter_polygons(geometry_override)]
+        if geometry_override is not None
+        else list(iter_layer_polygons(layer, subtract=subtract, clip=clip))
+    )
+    if not polygons:
+        return
     stream.write(f'    def Scope "{scope_name}"\n    {{\n')
-    feature_index = 0
-    for feature in layer.features:
-        geometry = shape(feature["geometry"])
-        polygons = geometry.geoms if geometry.geom_type == "MultiPolygon" else (geometry,)
-        properties = feature.get("properties") or {}
-        height_m = properties.get("height_m") or properties.get("assumed_height_m")
-        height_m = height_m or layer.assumed_height_m or default_height_m
-        if height_m is None:
-            continue
-        for polygon in polygons:
-            min_x, min_y, max_x, max_y = polygon.bounds
-            center = polygon.centroid
-            try:
-                ground_z = heightmap.elevation_at(center.x, center.y)
-            except IndexError:
-                continue
-            prim_name = f"{scope_name}_{feature_index:05d}"
-            stream.write(f'        def Cube "{prim_name}"\n        {{\n')
-            stream.write("            double size = 1\n")
-            stream.write(
-                "            double3 xformOp:translate = "
-                f"({center.x:.17g}, {center.y:.17g}, {ground_z + height_m / 2:.17g})\n"
+    for feature_index, (polygon, properties) in enumerate(polygons):
+        height_m = (
+            properties.get("height_m")
+            or properties.get("assumed_height_m")
+            or layer.assumed_height_m
+            or default_height_m
+        )
+        if follow_terrain:
+            ground_elevation = lambda coordinates: np.asarray(
+                [
+                    _elevation_inside_bounds(heightmap, x_m, y_m)
+                    for x_m, y_m in coordinates
+                ],
+                dtype=np.float64,
             )
-            stream.write(
-                "            double3 xformOp:scale = "
-                f"({max_x - min_x:.17g}, {max_y - min_y:.17g}, {height_m:.17g})\n"
+        else:
+            ground_point = polygon.representative_point()
+            ground_z = _elevation_inside_bounds(heightmap, ground_point.x, ground_point.y)
+            ground_elevation = lambda coordinates, value=ground_z: np.full(
+                len(coordinates), value, dtype=np.float64
             )
-            stream.write(
-                '            uniform token[] xformOpOrder = '
-                '["xformOp:translate", "xformOp:scale"]\n'
-            )
-            stream.write(f"            custom string shepherd:sourceLayer = {json.dumps(layer.layer_type)}\n")
-            stream.write("        }\n")
-            feature_index += 1
+        prism = polygon_to_prism_mesh(
+            polygon,
+            ground_elevation=ground_elevation,
+            height_m=float(height_m),
+            max_triangle_edge_m=(
+                heightmap.grid.cell_size_m * 2.0 if follow_terrain else None
+            ),
+        )
+        prim_name = f"{prim_prefix}_{feature_index:05d}"
+        stream.write(f'        def Mesh "{prim_name}"\n        {{\n')
+        stream.write("            point3d[] points = ")
+        _write_tuple_array(stream, prism.vertices, indent="                ", precision=12)
+        stream.write("\n            int[] faceVertexCounts = ")
+        _write_integer_array(
+            stream,
+            np.full(len(prism.faces), 3, dtype=np.int32),
+            indent="                ",
+        )
+        stream.write("\n            int[] faceVertexIndices = ")
+        _write_integer_array(stream, prism.faces, indent="                ")
+        stream.write("\n            normal3f[] normals = ")
+        _write_tuple_array(stream, prism.face_normals, indent="                ")
+        stream.write(
+            '\n            (\n                interpolation = "uniform"\n            )\n'
+            '\n            uniform token subdivisionScheme = "none"\n'
+            "            uniform bool doubleSided = true\n"
+            f"            color3f[] primvars:displayColor = "
+            f"[({display_color[0]}, {display_color[1]}, {display_color[2]})]\n"
+            '            uniform token primvars:displayColor:interpolation = "constant"\n'
+            "            float[] primvars:displayOpacity = [1]\n"
+            '            uniform token primvars:displayOpacity:interpolation = "constant"\n'
+            f"            custom double shepherd:heightM = {float(height_m):.17g}\n"
+            f'            custom string shepherd:sourceLayer = "{source_layer}"\n'
+            "        }\n"
+        )
     stream.write("    }\n\n")
+
+
+# 森林Polygonを地表に沿う高さ5 mの完全遮蔽領域として出力する．
+def _write_forest_prisms(
+    stream, layer, heightmap, *, subtract=None, clip=None, geometry_override=None
+) -> None:
+    _write_prism_scope(
+        stream,
+        layer,
+        heightmap,
+        scope_name="Forest",
+        prim_prefix="Forest",
+        source_layer="forest",
+        display_color=(0.04, 0.28, 0.07),
+        default_height_m=10.0,
+        follow_terrain=True,
+        subtract=subtract,
+        clip=clip,
+        geometry_override=geometry_override,
+    )
+
+
+# 建物外周を地表から高さ方向へ押し出した簡易3D Meshとして出力する．
+def _write_building_prisms(
+    stream,
+    layer,
+    heightmap,
+    *,
+    scope_name: str = "Buildings",
+    source_layer: str = "buildings",
+    display_color: tuple[float, float, float] = (0.48, 0.48, 0.52),
+    subtract=None,
+    clip=None,
+) -> None:
+    _write_prism_scope(
+        stream,
+        layer,
+        heightmap,
+        scope_name=scope_name,
+        prim_prefix=scope_name,
+        source_layer=source_layer,
+        display_color=display_color,
+        default_height_m=5.0,
+        follow_terrain=False,
+        subtract=subtract,
+        clip=clip,
+    )
 
 
 @dataclass(frozen=True)
@@ -138,6 +238,9 @@ def write_environment_usd(
     heightmap=None,
     buildings=None,
     forest=None,
+    facility_buildings=None,
+    scene_crop=None,
+    forest_boundary_smoothing_m: float = 0.0,
     overwrite: bool = False,
 ) -> Path:
     destination = Path(path)
@@ -166,13 +269,46 @@ def write_environment_usd(
             stream.write(
                 '\n        (\n            interpolation = "vertex"\n        )\n'
                 '        uniform token subdivisionScheme = "none"\n'
+                "        uniform bool doubleSided = true\n"
+                "        color3f[] primvars:displayColor = [(0.42, 0.35, 0.20)]\n"
+                '        uniform token primvars:displayColor:interpolation = "constant"\n'
                 "    }\n\n"
             )
-            _write_feature_boxes(
-                stream, forest, heightmap, scope_name="Forest", default_height_m=5.0
+            building_footprints = layer_union(buildings)
+            facility_footprints = layer_union(facility_buildings)
+            forest_geometry = layer_union(forest)
+            if scene_crop is not None:
+                building_footprints = building_footprints.intersection(scene_crop)
+                facility_footprints = facility_footprints.intersection(scene_crop)
+                forest_geometry = forest_geometry.intersection(scene_crop)
+            forest_geometry = forest_geometry.difference(building_footprints)
+            if forest_boundary_smoothing_m > 0.0 and not forest_geometry.is_empty:
+                half = forest_boundary_smoothing_m * 0.5
+                forest_geometry = forest_geometry.buffer(half, join_style=2).buffer(
+                    -half, join_style=2
+                )
+                forest_geometry = forest_geometry.simplify(half, preserve_topology=True)
+            _write_forest_prisms(
+                stream,
+                forest,
+                heightmap,
+                geometry_override=forest_geometry,
             )
-            _write_feature_boxes(
-                stream, buildings, heightmap, scope_name="Buildings", default_height_m=None
+            _write_building_prisms(
+                stream,
+                buildings,
+                heightmap,
+                subtract=facility_footprints,
+                clip=scene_crop,
+            )
+            _write_building_prisms(
+                stream,
+                facility_buildings,
+                heightmap,
+                scope_name="FacilityBuildings",
+                source_layer="facility_buildings",
+                display_color=(0.85, 0.42, 0.08),
+                clip=scene_crop,
             )
             stream.write('    def Scope "Cameras"\n    {\n')
             for camera in layout.cameras:

@@ -1,22 +1,41 @@
-FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0
+ARG BASE_IMAGE=nvcr.io/nvidia/l4t-jetpack:r36.4.0
+FROM ${BASE_IMAGE}
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONPATH=/workspace/libs/shepherd-contracts/src:/workspace/packages/field-environment/src:/workspace/packages/field-campost/src:/workspace/packages/field-sim/src
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         git \
+        libegl1 \
         libgl1 \
+        libglu1-mesa \
         libglib2.0-0 \
+        libopenblas-dev \
+        libsm6 \
+        libx11-6 \
+        libxcursor1 \
+        libxext6 \
+        libxfixes3 \
+        libxi6 \
+        libxinerama1 \
+        libxrandr2 \
+        libxrender1 \
+        libxxf86vm1 \
+        mesa-utils \
         python3 \
         python3-pip \
         python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/requirements.txt
+ENV PIP_CONFIG_FILE=/dev/null \
+    PIP_INDEX_URL=https://pypi.org/simple \
+    PIP_EXTRA_INDEX_URL=
 RUN python3 -m pip install --upgrade pip \
     && python3 -m pip install -r /tmp/requirements.txt
 
@@ -26,6 +45,40 @@ COPY packages/field-campost /tmp/field-campost
 COPY packages/field-sim /tmp/field-sim
 RUN python3 -m pip install /tmp/shepherd-contracts /tmp/field-environment /tmp/field-campost /tmp/field-sim \
     && rm -rf /tmp/shepherd-contracts /tmp/field-environment /tmp/field-campost /tmp/field-sim
+
+# GenesisはCase生成の必須依存にせず，閲覧用イメージを作る場合だけ導入する．
+ARG INSTALL_GENESIS=0
+ARG TORCH_INSTALL=
+ARG GENESIS_VERSION=1.4.5
+ARG GENESIS_NUMPY_VERSION=1.26.4
+ARG CUSPARSELT_VERSION=0.5.2.1
+RUN if [ "${INSTALL_GENESIS}" = "1" ]; then \
+        python3 -m pip install "numpy==${GENESIS_NUMPY_VERSION}" \
+        && \
+        if [ -n "${TORCH_INSTALL}" ]; then \
+            python3 -m pip install "${TORCH_INSTALL}"; \
+        elif ! python3 -c "import torch"; then \
+            echo "Genesis build requires a JetPack-compatible PyTorch base image or TORCH_INSTALL wheel URL" >&2; \
+            exit 1; \
+        fi \
+        && python3 -m pip install "genesis-world==${GENESIS_VERSION}"; \
+    fi
+RUN if [ "${INSTALL_GENESIS}" = "1" ]; then \
+        python3 -m pip install \
+            "numpy==${GENESIS_NUMPY_VERSION}" \
+            "numba==0.60.0" \
+            "opencv-python==4.11.0.86"; \
+    fi
+RUN if [ "${INSTALL_GENESIS}" = "1" ]; then \
+        archive="libcusparse_lt-linux-sbsa-${CUSPARSELT_VERSION}-archive" \
+        && python3 -c "import urllib.request; urllib.request.urlretrieve('https://developer.download.nvidia.com/compute/cusparselt/redist/libcusparse_lt/linux-sbsa/${archive}.tar.xz', '/tmp/cusparselt.tar.xz')" \
+        && mkdir /tmp/cusparselt \
+        && tar -xJf /tmp/cusparselt.tar.xz -C /tmp/cusparselt \
+        && cp -a "/tmp/cusparselt/${archive}/include/." /usr/local/cuda/include/ \
+        && cp -a "/tmp/cusparselt/${archive}/lib/." /usr/local/cuda/lib64/ \
+        && ldconfig \
+        && rm -rf /tmp/cusparselt /tmp/cusparselt.tar.xz; \
+    fi
 
 WORKDIR /workspace
 CMD ["sleep", "infinity"]

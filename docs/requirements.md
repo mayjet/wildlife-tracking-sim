@@ -11,7 +11,7 @@
 - 鹿の移動，追跡，評価の基本座標は2Dとする．地形と遮蔽判定は3Dで扱う．
 - Simulator backendは`AnalyticBackend`と`GenesisBackend`を分離する．Genesisは任意拡張であり，初期環境の必須依存にしない．
 - カメラの位置，向き，視認距離，FOV，遮蔽条件を設定可能にする．視認距離の初期値は42 mとする．
-- 森林は地面から5 mまでの完全遮蔽領域とし，牧場内の森林も追跡対象領域に含める．
+- 森林は地面から設定可能な高さまでの完全遮蔽領域とし，標準値を10 mとする．牧場内の森林も追跡対象領域に含める．
 - 建物は簡易3D形状と鹿の移動不可領域を表現する．
 - 観測はPerfect Observationのみとし，可視な鹿の真の2D位置を観測値として生成する．Noisy Observationは実装しない．
 - Trackerは非観測期間も個体および群れの状態予測を継続する．牧場境界による追跡終了判定にはTrackerの推定値を使う．
@@ -27,7 +27,11 @@
 - USDはm単位・Z-upで`cases/<case_id>/environment.usd`へ保存し，`camera_layout.json`の観測用CameraとUSDの可視化用Cameraを区別する．
 - `terrain.source`は`synthetic`，`alos`，`gsi`，`file`を区別し，すべて同じ`EnvironmentCase`へ変換する．入力条件は`workspace/experiments/*.yaml`，確定結果はCaseの`case.yaml`へ分離する．
 - ALOS AW3D30をDSMとして記録し，国土地理院tileをDEMとして記録する．出力cell sizeを元データの実効解像度と同一視しない．NoDataを0 mへ置換しない．
-- 建物・森林は`unavailable`，`empty`，`available`を区別する．建物は移動禁止，森林は移動可能を原則とし，森林のUSD表示高は5 mとする．
+- 建物・森林は`unavailable`，`empty`，`available`を区別する．建物は移動禁止，森林は移動可能を原則とし，森林のUSD表示高は標準10 mとする．
+- 取得した3 km地形は原本として保持し，3D出力は確定牧場を囲む矩形または正方形へクロップできるようにする．標準では牧場外接矩形の1.5倍かつ100 m以上の余白を確保する．
+- 森林・建物の3D形状は全側面・上面・下面を持つ閉立体とし，USDを交換形式，Genesis用OBJを同じ形状から生成する派生形式とする．
+- 実地形CaseではRGB画像，土地被覆，森林，開放地，建物，牧場候補，監視範囲を個別に表示・保存し，使用データ，判定条件，集計値を処理記録へ残す．
+- 建物外周は国土地理院ベクトルタイルを主入力とし，OSMで名称・高さを補完できるようにする．実高さがない場合は設定した仮定高を明示して3D Meshへ押し出す．
 - 最小SimulatorはCase取得元を知らず，静止・等速直線・時刻付きWaypointを同じAPIで実行する．牧場境界外は許容し，地形mesh外，欠損標高，建物・禁止cellは拒否する．
 - Phase 6 Datasetは`manifest.json`と`ground_truth.parquet`を保存する．ObservationはPhase 7まで生成せず，manifestに未生成状態を記録する．
 
@@ -49,4 +53,4 @@ Caseの入力，派生地形，USD，Dataset，Runはすべて`cases/<case_id>/`
 
 ## Phase 6完了時点の非対象
 
-OSM/PLATEAU/JAXA土地被覆の自動取得，鹿の群れ・意思決定，Camera観測・遮蔽・ray tracing，Tracker，評価計算，Rerun，配置探索，Noisy Observationは未実装とする．Genesis描画adapterは実装済みだが，`genesis-world`と`usd-core`を共通必須依存にはせず，利用可能な環境だけで実行する．
+PLATEAUの自動取得，衛星画像からの独自建物画像認識，鹿の群れ・意思決定，Camera観測・遮蔽・ray tracing，Tracker，評価計算，Rerun，配置探索，Noisy Observationは未実装とする．Genesis描画adapterは実装済みだが，`genesis-world`と`usd-core`を共通必須依存にはせず，利用可能な環境だけで実行する．

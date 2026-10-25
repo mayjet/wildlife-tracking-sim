@@ -145,7 +145,7 @@ workspace/00_environment.ipynb
 
 `heightmap_to_mesh()`はHeightmapの各cell中心を1頂点として，`values[y, x]`と同じrow-major順で頂点を生成する．隣接する4頂点から2三角形を作り，+Z側から見て反時計回りになる面順序とvertex normalを保存する．このPhaseではcell境界の補間やmesh decimationを行わない．
 
-`FixedCameraPlacement`は`(x, y)`と地表面からの高さを受け，`Heightmap.elevation_at()`から`CameraSpec.position.z_m`を求める．保存後は`CameraSpec`の絶対ENU座標を正とする．`camera_layout.json`はContracts JSONそのもので，`environment.usd`内のCamera primは表示用である．観測計算はUSD Cameraではなく`camera_layout.json`を読む．
+`FixedCameraPlacement`は`(x, y)`と地表面からの高さを受け，Terrain Meshと同じ区分平面補間から`CameraSpec.position.z_m`を求める．鹿，Camera，森林，建物は同じ地表面参照を使用する．保存後は`CameraSpec`の絶対ENU座標を正とする．`camera_layout.json`はContracts JSONそのもので，`environment.usd`内のCamera primは表示用である．観測計算はUSD Cameraではなく`camera_layout.json`を読む．
 
 USD stageは`metersPerUnit=1`，`upAxis=Z`，default prim `/World`とする．Terrain Meshはcell中心座標を内包する．ContractsのCamera body frameは+Xを視線方向，+Yを左，+Zを上とし，USD Cameraの-X/+Y/-Z規則へ表示transformで変換する．元のyaw/pitch/roll，FOV，距離，観測間隔もcustom attributeとして保持し，再読み込み時に`CameraLayout`と照合する．
 
@@ -157,7 +157,11 @@ ASCII USDA writerはNumPyだけで動作し，Jetson上のCase生成を`usd-core
 
 AW3D30 adapterはJAXA Earth API `JAXA.EORC_ALOS.PRISM_AW3D30.v3.2_global`の`DSM` bandを取得する．GSI adapterは公式PNG tileの符号付き0.01 m encodingを復号し，優先datasetから欠損cellを補う．GeoTIFF adapterは入力CRSを必須とする．取得元はnorth-up，memory上は南西cell中心を`values[0,0]`とするため，共通reprojection境界で1回だけrowを反転する．
 
-Case操作は`create`，`load`，`edit`を区別する．`create`は既存Caseを拒否し，`load`は通信しない．`edit`はCase全体を一時directoryへcopyしてから置換し，対象外のsource，Camera，USD，Dataset，Runを保持する．`FeatureLayerStatus`は未取得と空集合を区別し，`traversability.tif`は`0=unknown, 1=traversable, 2=difficult, 3=prohibited`とする．Phase 5のUSD森林・建物はPolygonのbounding boxによる簡易Cubeであり，遮蔽計算には使わない．
+Case操作は`create`，`load`，`edit`を区別する．`create`は既存Caseを拒否し，`load`は通信しない．`edit`はCase全体を一時directoryへcopyしてから置換し，対象外のsource，Camera，USD，Dataset，Runを保持する．`FeatureLayerStatus`は未取得と空集合を区別し，`traversability.tif`は`0=unknown, 1=traversable, 2=difficult, 3=prohibited`とする．
+
+環境判定は，国土地理院RGBタイル，JAXA土地被覆，傾斜，国土地理院ベクトルタイルの建物外周をCase座標へ揃える．建物の名称・高さは取得できる場合だけOSMで補完し，取得失敗と地物なしを区別する．開放地の連続性，細い森林帯，囲まれた領域，指定座標，建物との距離から牧場候補の塊を選び，研究者の明示設定後に監視範囲として確定する．入力，閾値，面積，件数は`case.yaml`の処理記録へ保存する．
+
+USD森林と建物は取得した2D外周を地表から高さ方向へ押し出し，上面・下面・全側面を持つ閉立体Meshで表現する．森林は地形へ追従し，標準高を10 mとする．実高さがない建物には設定値を使い，仮定値であることを地物属性へ残す．元の3 km地形と地物はCaseへ保持し，3D生成時だけ確定牧場を囲む`scene_crop.geojson`で切り出す．USDを将来のSimulatorを含む交換形式とし，Genesis用OBJは同じCase形状から生成するadapterである．`field_summary.json`にはクロップ寸法，面積，高低差，傾斜，地物面積，Mesh規模を保存する．これらは3D確認用であり，Phase 7まで遮蔽計算には使わない．
 
 ## Phase 6 最小Simulator層
 

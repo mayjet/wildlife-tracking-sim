@@ -8,6 +8,7 @@ import rasterio
 import yaml
 
 from ..farm.boundary import FarmBoundary
+from ..environment_detection import RasterLayer
 from ..features import PolygonFeatureLayer, TraversabilityMap
 from ..terrain.heightmap import Heightmap, TerrainGridSpec
 from .models import CaseDocument, EnvironmentCase
@@ -63,7 +64,16 @@ def load_case(cases_root: str | Path, case_id: str) -> EnvironmentCase:
     )
     boundary = FarmBoundary.from_geojson(boundary_document)
     feature_layers = {}
-    for name, filename in (("buildings", "buildings.geojson"), ("forest", "forest.geojson")):
+    for name, filename in (
+        ("buildings", "buildings.geojson"),
+        ("forest", "forest.geojson"),
+        ("pasture_candidates", "pasture_candidates.geojson"),
+        ("farm_complex_candidates", "farm_complex_candidates.geojson"),
+        ("monitoring_area", "monitoring_area.geojson"),
+        ("facility_buildings", "facility_buildings.geojson"),
+        ("excluded_buildings", "excluded_buildings.geojson"),
+        ("scene_crop", "scene_crop.geojson"),
+    ):
         metadata = document.feature_layers.get(name)
         if metadata is None:
             feature_layers[name] = None
@@ -93,6 +103,49 @@ def load_case(cases_root: str | Path, case_id: str) -> EnvironmentCase:
                 None if difficult_tag in (None, "unset") else float(difficult_tag)
             ),
         )
+    imagery = None
+    landcover = None
+    if document.detection is not None:
+        for layer_type, reference, source, attribution, resolution in (
+            (
+                "imagery",
+                document.detection.imagery_ref,
+                document.detection.imagery_source,
+                document.detection.imagery_attribution,
+                document.detection.imagery_source_resolution_m,
+            ),
+            (
+                "landcover",
+                document.detection.landcover_ref,
+                document.detection.landcover_source,
+                document.detection.landcover_attribution,
+                document.detection.landcover_source_resolution_m,
+            ),
+        ):
+            if reference is None:
+                continue
+            with rasterio.open(case_directory / reference) as dataset:
+                stored = dataset.read()
+                grid = TerrainGridSpec.from_extent(
+                    dataset.width * dataset.transform.a,
+                    dataset.height * -dataset.transform.e,
+                    dataset.transform.a,
+                    min_x_m=dataset.transform.c,
+                    min_y_m=dataset.transform.f + dataset.height * dataset.transform.e,
+                )
+            values = stored.transpose(1, 2, 0)[::-1, :, :] if layer_type == "imagery" else stored[0][::-1, :]
+            layer = RasterLayer(
+                layer_type=layer_type,
+                values=values,
+                grid=grid,
+                source=source or "unknown",
+                attribution=attribution or "unknown",
+                source_resolution_m=resolution,
+            )
+            if layer_type == "imagery":
+                imagery = layer
+            else:
+                landcover = layer
     environment_case = EnvironmentCase(
         case_spec=document.case,
         heightmap=heightmap,
@@ -103,8 +156,17 @@ def load_case(cases_root: str | Path, case_id: str) -> EnvironmentCase:
         buildings=feature_layers["buildings"],
         forest=feature_layers["forest"],
         traversability=traversability,
+        imagery=imagery,
+        landcover=landcover,
+        pasture_candidates=feature_layers["pasture_candidates"],
+        farm_complex_candidates=feature_layers["farm_complex_candidates"],
+        monitoring_area=feature_layers["monitoring_area"],
+        facility_buildings=feature_layers["facility_buildings"],
+        excluded_buildings=feature_layers["excluded_buildings"],
+        scene_crop=feature_layers["scene_crop"],
         input_config_digest=document.input_config_digest,
         history=document.history,
+        processing_steps=document.processing_steps,
     )
     validate_environment_case(environment_case)
     if environment_case.terrain_metadata != document.terrain:
