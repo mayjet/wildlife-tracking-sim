@@ -8,9 +8,11 @@ from field_environment import (
     CaseMode,
     EnvironmentConfig,
     EnvironmentConfigurationError,
+    FarmConfig,
     FileTerrainConfig,
     GeographicTerrainConfig,
     SyntheticTerrainConfig,
+    author_environment_config,
     load_environment_config,
 )
 
@@ -111,3 +113,29 @@ scene:
     assert config.scene is not None
     assert config.scene.forest_height_m == 10
     assert config.scene.crop.scale == 1.5
+
+
+def test_python_environment_config_is_saved_as_reproducible_yaml(tmp_path: Path) -> None:
+    config = EnvironmentConfig(
+        case_id="python-authored-case",
+        mode=CaseMode.CREATE,
+        terrain=SyntheticTerrainConfig(
+            source="synthetic",
+            type="hills",
+            size_m=100,
+            cell_size_m=10,
+            relief_m=20,
+            seed=5,
+        ),
+        farm=FarmConfig(boundary_type="rectangle", size_m=80),
+    )
+
+    authored = author_environment_config(tmp_path, config, version="v1")
+
+    assert authored.config == config
+    assert authored.config_path == (
+        tmp_path / "environments/python-authored-case/v1/environment.yaml"
+    )
+    assert "NotebookのPython設定" in authored.config_path.read_text(encoding="utf-8")
+    with pytest.raises(FileExistsError):
+        author_environment_config(tmp_path, config, version="v1", overwrite=False)

@@ -35,18 +35,32 @@ Notebookでは，衛星画像，標高，傾斜，森林，建物，牧場候補
 
 ## 3．Genesisで閲覧する
 
-Jetsonデスクトップのターミナルから実行する．標準ではX11画面`:1`，コンテナ`wildlife-miyota-dev`，御代田Caseを使用する．終了時はX11許可を自動的に戻す．
+`04_simulation.ipynb`を最後まで実行すると，Case，配置，ルートの実データを埋め込んだ`docker exec`コマンドが一覧表示される．Jetsonデスクトップのターミナルへ上から順にコピーして確認する．Shell Scriptの編集は不要である．
 
-```bash
-cd ~/Documents/wildlife-management/wildlife-tracking-sim
-./workspace/view_environment.sh
+- `environment`：地形，森林，建物だけを表示する．
+- `observation-points`：実物層のポールとカメラ筐体を追加する．
+- `camera`：全CameraSpecの40 m FOVを半透明表示し，選択観測点を赤で強調する．
+- `visibility`：1 m可視結果を疎な緑・赤の点で重ねる．
+- `route`：Waypointと確定ルートを表示する．
+- `validation`：代表的な可視・不可視視線を追加する．
+- `all`：すべてを表示する．情報量が多いため最終確認用とする．
+
+FOV，可視点，ルート，検証線はViewer専用UIであり，物理衝突やセンサー視線を遮らない．再現用USD層と検証JSONはCase内へ保存する．
+
+## 4．観測実験を作成する
+
+`04_simulation.ipynb`の先頭でCase，カメラ配置，カメラ台数，ルート方式，seedをPythonで宣言する．Waypoint GUIセルまで実行して必要なSetを保存した後，残りのセルを実行する．YAMLはNotebookが再現用に自動生成するため，通常は編集しない．
+
+```python
+case_id = "MiyotaMtBase_gsi_3km_v1"
+camera_placements = [("grid", 40.0), ("uniform", 100)]
+camera_counts = [6]
+route_methods = ["smooth", "meandering"]
+seeds = [42]
 ```
 
-別の値を使う場合は環境変数で指定する．
+`grid`の値は間隔m，`uniform`の値は観測点数を意味する．リストへ書いた配置，カメラ台数，ルート，seedを全て直積で実験する．宣言例と自作手法の置き場所はNotebook内に記載している．地図クリック式Waypoint Managerでは複数のWaypoint Setを作成・保存・再読込でき，各Setから`smooth`と`meandering`を生成する．赤い移動禁止セル上のWaypointは近い移動可能セルへ補正し，Waypoint間の建物・禁止セルはA*で迂回する．補正と迂回条件は生成YAMLと確定ルートへ記録する．
 
-```bash
-GENESIS_DISPLAY=:1 \
-CONTAINER_NAME=wildlife-miyota-dev \
-CASE_ID=MiyotaMtBase_gsi_3km_v1 \
-./workspace/view_environment.sh
-```
+Notebookはコメント付きYAMLを`workspace/experiments/generated/<experiment_id>/`へ生成し，観測点，鹿の詳細ルート，足元・胴・頭の2D可視範囲を表示する．確定配置は`cases/<case_id>/observation_point_layouts/`，確定ルートは`routes/`，真値と配置別Perfect Observationは`datasets/`へ保存する．既存結果は明示しない限り上書きしない．
+
+表示先，コンテナ名，BackendはNotebook末尾の設定で変更できる．FOVの40 mはPhase 7の配置確認用表示距離であり，Perfect Observationの判定条件は保存済みCameraSpecを使用する．

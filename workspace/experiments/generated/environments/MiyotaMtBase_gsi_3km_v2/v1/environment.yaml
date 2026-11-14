@@ -1,0 +1,69 @@
+# 00_environment_python.ipynbから自動生成した再現用設定である。
+# 通常は直接編集せず，NotebookのPython設定を変更して再生成する。
+case_id: MiyotaMtBase_gsi_3km_v2
+mode: create
+terrain:
+  source: gsi
+  center_lat: 36.35011004721748
+  center_lon: 138.4966065945264
+  size_m: 3000.0
+  cell_size_m: 5.0
+  missing_data: nearest
+  offline: false
+  gsi_datasets:
+  - dem1a_png
+  - dem5a_png
+  - dem5b_png
+  - dem5c_png
+  - dem_png
+farm:
+  boundary_type: rectangle
+  size_m: 2000.0
+detection:
+  imagery:
+    source: gsi_seamlessphoto
+    zoom: 17
+    output_cell_size_m: 1.0
+    offline: false
+  landcover:
+    source: esa_worldcover
+    year: 2021
+    offline: false
+  buildings:
+    source: gsi_vector_osm
+    overpass_url: https://overpass-api.de/api/interpreter
+    gsi_zoom: 16
+    assumed_height_m: 5.0
+    offline: false
+  pasture:
+    open_landcover_classes:
+    - 30
+    - 40
+    - 60
+    maximum_slope_deg: 20.0
+    minimum_area_m2: 1000.0
+    bridge_gap_m: 40.0
+    facility_maximum_distance_m: 40.0
+    monitoring_closing_m: 120.0
+    monitoring_buffer_m: 10.0
+    selection_anchor_x_m: 0.0
+    selection_anchor_y_m: 0.0
+    confirm_monitoring_boundary: true
+  forest_classes:
+  - 10
+  - 95
+  forest_minimum_area_m2: 100.0
+  difficult_slope_deg: 35.0
+scene:
+  crop:
+    enabled: true
+    source: farm_boundary
+    shape: square
+    scale: 1.5
+    minimum_margin_m: 100.0
+    center_offset_x_m: 0.0
+    center_offset_y_m: 0.0
+    snap_to_terrain_grid: true
+  forest_height_m: 10.0
+  forest_boundary_smoothing_m: 5.0
+cameras: []

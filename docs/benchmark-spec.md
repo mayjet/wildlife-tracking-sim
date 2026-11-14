@@ -23,6 +23,8 @@
 
 候補指標は時間・対象ごとの可視率，連続非観測時間，対象領域被覆，使用カメラ数，配置制約違反とする．視認距離，FOV，森林・建物遮蔽，地形遮蔽を評価条件として記録する．Camera Geometryの詳細最適化は将来拡張である．
 
+Phase 7の対象領域被覆は，鹿の地表・0.75 m・1.5 mの3D可視判定を2Dへ投影して計算可能とする．完全可視，部分可視，不可視，観測点直下の垂直FOV死角，terrain/森林/建物遮蔽を区別する．grid解像度は評価条件へ記録し，鹿の連続座標をgrid中心へ丸めない．
+
 ## 再現性
 
 RunにはCase ID，Dataset ID，Scenario設定，アルゴリズム名とversion，全パラメータ，seed，Python・OS・GPU環境，Schema version，開始・終了時刻，成果物checksumを記録する．同一設定とseedで再実行できることを要求し，非決定的GPU処理を使う場合はその旨と許容差を記録する．
@@ -30,4 +32,3 @@ RunにはCase ID，Dataset ID，Scenario設定，アルゴリズム名とversion
 ## 保存方針
 
 Datasetは`cases/<case_id>/datasets/<dataset_id>/`，Runは`cases/<case_id>/runs/<run_id>/`に保存する．入力設定とmanifestは人が確認できる形式を基本とし，大規模な時系列や配列の形式は実装Phaseで決定する．評価用真値はTracker入力から分離する．
-

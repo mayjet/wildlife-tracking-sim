@@ -1,0 +1,14 @@
+route_id: route-002-v1-smooth-v1  # 保存する確定ルートID
+route_group_id: route-002-v1  # 入力Waypoint集合のID
+method: smooth  # 使用するルート生成方式
+waypoint_set: ../waypoint_sets/route-002-v1.yaml  # 入力Waypointの保存先
+seed: 42  # ルート形状を再現するseed
+parameters:  # ルート方式固有の設定
+  auto_avoid_prohibited: true  # 禁止領域を自動迂回するか
+  snap_waypoints: true  # 禁止地点を近傍へ補正するか
+  snap_radius_m: 30.0  # Waypoint補正の探索半径m
+  obstacle_clearance_m: 2.0  # 障害物から確保する距離m
+  difficult_cost_multiplier: 4.0  # 移動困難セルの経路コスト倍率
+  smoothing_tension: 0.0  # 曲線の張り具合0から1
+  point_spacing_m: 1.0  # 詳細経路点の間隔m
+  unknown_cost_multiplier: 1.0  # 未分類セルの経路コスト倍率

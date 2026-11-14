@@ -4,7 +4,7 @@
 
 本システムは，3次元農場環境で鹿の追跡手法とカメラ配置手法を再現可能に比較するシミュレーション・ベンチマーク基盤である．主対象はJetson Orin Nano（JetPack 6系，ARM64）であり，x86_64 NVIDIA GPU搭載Linuxも対象とする．
 
-開発はPhase 0〜12で進める．Phase 0〜6では，開発環境，共通Contracts，人工・公開標高・GeoTIFFの共通Case，固定Camera・terrain mesh・USD，最小Ground Truth Simulatorまでを完成させた．Phase 7以降の観測，Tracker，Benchmark，群れ行動，配置最適化には進まない．
+開発はPhase 0〜12で進める．Phase 0〜7では，開発環境，共通Contracts，共通Case，固定Camera・terrain mesh・USD，最小Ground Truth Simulator，距離・FOV・3D遮蔽に基づくPerfect Observationまでを完成させた．Phase 8以降のWeb表示，Tracker，Benchmark，群れ行動，配置最適化には進まない．
 
 ## 機能要件
 
@@ -34,6 +34,11 @@
 - 建物外周は国土地理院ベクトルタイルを主入力とし，OSMで名称・高さを補完できるようにする．実高さがない場合は設定した仮定高を明示して3D Meshへ押し出す．
 - 最小SimulatorはCase取得元を知らず，静止・等速直線・時刻付きWaypointを同じAPIで実行する．牧場境界外は許容し，地形mesh外，欠損標高，建物・禁止cellは拒否する．
 - Phase 6 Datasetは`manifest.json`と`ground_truth.parquet`を保存する．ObservationはPhase 7まで生成せず，manifestに未生成状態を記録する．
+- Phase 7 Datasetは`observations.parquet`，使用した観測点配置，Visibility設定を追加し，Observationへ真値IDを保存しない．
+- 観測点は地表から5 mの固定ポールを標準とし，1観測点の固定Camera台数は変更可能とする．標準比較は3〜6台，水平FOV 60°，最大視認距離42 mを使用する．
+- 標準配置はPythonで`("grid", 間隔m)`または`("uniform", 観測点数)`と宣言する．事前確定ルートは地図GUIで複数のWaypoint Setを作り，各Setへ`smooth`と`meandering`を適用する．配置・ルート・seedの全組合せを再現可能にし，YAMLはコメント付きの実験記録として自動生成する．Waypointは地形取得範囲全体へ指定でき，禁止地点は設定範囲内の移動可能セルへ補正し，Waypoint間の建物・禁止セルは自動迂回する．確定配置と確定ルートは既存IDを上書きしない．
+- 可視範囲の40 m gridは高速previewとし，正式な配置評価は1 m gridで足元・胴・頭を判定する．正式評価は分割実行，途中保存，再開，Case・配置単位の再利用を可能にする．
+- 2D可視範囲は地表，0.75 m，1.5 mの高さを3D判定して地面上へ投影する．地形cellや可視範囲gridは鹿の連続2D移動を制限しない．
 
 ## Ground Truth分離
 

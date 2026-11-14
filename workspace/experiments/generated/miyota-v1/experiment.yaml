@@ -1,0 +1,24 @@
+experiment_id: miyota-v1  # 実験条件一式のID
+case_id: MiyotaMtBase_gsi_3km_v1  # 使用する農場Case
+placements:  # 全て試すカメラ配置
+- placements/grid-40m-cam6-v1.yaml
+- placements/uniform-100points-cam6-v1.yaml
+routes:  # 全て試す鹿ルート
+- routes/miyota-corridor-v1-direct-v1.yaml
+- routes/miyota-corridor-v1-meandering-v1.yaml
+seeds:  # 全て試す実験seed
+- 42
+matrix:  # 配置とルートの組合せ方法
+  mode: cartesian
+visibility:  # 可視判定の条件
+  preview_cell_size_m: 40.0  # 高速確認の評価間隔m
+  intermediate_cell_size_m: 10.0  # 中間確認の評価間隔m
+  evaluation_cell_size_m: 1.0  # 正式評価の間隔m
+  deer_height_m: 1.5  # 評価する鹿の高さm
+  sample_heights_m:  # 足元・胴・頭の評価高m
+  - 0.0
+  - 0.75
+  - 1.5
+simulation:  # 鹿の速度と時間刻み
+  speed_mps: 1.5  # 鹿の移動速度m/s
+  step_s: 1.0  # シミュレーション時間刻みs

@@ -11,12 +11,19 @@ from shapely.geometry import shape
 from field_campost import (
     ENVIRONMENT_USD_FILENAME,
     GenesisMeshSource,
+    GenesisRouteOverlay,
+    GenesisValidationRay,
+    GenesisVisibilityOverlay,
     GenesisViewerOptions,
     build_genesis_mesh_scene,
+    draw_genesis_experiment_overlays,
     inspect_genesis,
+    load_observation_point_layout,
     read_environment_usd,
     run_genesis_viewer,
+    write_experiment_scene_layers,
     write_genesis_mesh_assets,
+    write_observation_infrastructure_assets,
 )
 from field_environment import (
     EnvironmentCase,
@@ -26,9 +33,17 @@ from field_environment import (
     resolve_case_path,
     scene_crop_geometry,
 )
+from field_sim import (
+    build_phase7_validation_report,
+    load_resolved_route,
+    load_visibility_map,
+    save_phase7_validation_report,
+    visibility_overlay_positions,
+)
 
 
-DEFAULT_CASE_ID = "MiyotaMtBase_gsi_3km_v1"
+DEFAULT_CASE_ID = "MiyotaMtBase_gsi_3km_v3"
+DEFAULT_LAYOUT_ID = "grid-40m-cam6-v1"
 
 
 @dataclass(frozen=True)
@@ -117,6 +132,36 @@ def create_viewer_options(
     )
 
 
+def _selected_point(layout, point_id: str | None, environment_case: EnvironmentCase):
+    if point_id is not None:
+        try:
+            return next(point for point in layout.points if point.point_id == point_id)
+        except StopIteration as error:
+            raise ValueError(f"Observation point not found: {point_id}") from error
+    centroid = environment_case.farm_boundary.polygon.centroid
+    return min(
+        layout.points,
+        key=lambda point: (point.position.x_m - centroid.x) ** 2
+        + (point.position.y_m - centroid.y) ** 2,
+    )
+
+
+def _camera_viewer_options(point, resolution: tuple[int, int]) -> GenesisViewerOptions:
+    return GenesisViewerOptions(
+        resolution=resolution,
+        camera_position=(
+            point.position.x_m - 32.0,
+            point.position.y_m - 32.0,
+            point.position.z_m + 22.0,
+        ),
+        camera_look_at=(point.position.x_m, point.position.y_m, point.position.z_m),
+        camera_fov_deg=55.0,
+        refresh_rate_hz=30,
+        show_world_frame=True,
+        world_frame_size_m=5.0,
+    )
+
+
 def _feature_count(layer) -> int:
     if layer is None or layer.status.value != "available":
         return 0
@@ -160,6 +205,36 @@ def _argument_parser() -> argparse.ArgumentParser:
         description="Open a saved environment Case in the Genesis interactive viewer."
     )
     parser.add_argument("--case-id", default=DEFAULT_CASE_ID)
+    parser.add_argument("--layout-id", default=DEFAULT_LAYOUT_ID)
+    parser.add_argument(
+        "--mode",
+        choices=(
+            "environment",
+            "observation-points",
+            "camera",
+            "visibility",
+            "route",
+            "validation",
+            "all",
+        ),
+        default="all",
+        help="Select physical objects and viewer-only validation overlays.",
+    )
+    parser.add_argument(
+        "--point-id",
+        help="Observation point used for the detailed camera/FOV view.",
+    )
+    parser.add_argument(
+        "--route-id",
+        action="append",
+        default=[],
+        help="Resolved route to draw. Repeat for multiple routes.",
+    )
+    parser.add_argument(
+        "--all-routes",
+        action="store_true",
+        help="Draw every saved route variant. This can make the viewer crowded.",
+    )
     parser.add_argument(
         "--cases-root",
         type=Path,
@@ -187,7 +262,58 @@ def _argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Validate the Case, USD, and Genesis dependencies without opening a window.",
     )
+    parser.add_argument(
+        "--visibility-max-points",
+        type=int,
+        default=8000,
+        help="Maximum visible and hidden 1 m samples drawn as a sparse UI overlay.",
+    )
+    parser.add_argument(
+        "--no-report",
+        action="store_true",
+        help="Do not update previews/genesis_validation_report.json.",
+    )
     return parser
+
+
+def _visibility_path(case_directory: Path, layout_id: str) -> Path:
+    directory = case_directory / "visibility_maps" / layout_id
+    candidates = (
+        directory / "visibility-1m-binary.npz",
+        directory / "visibility-1m.npz",
+        directory / "visibility-10m.npz",
+    )
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    raise FileNotFoundError(f"No visibility map found for layout: {layout_id}")
+
+
+def _saved_route_ids(case_directory: Path) -> list[str]:
+    return sorted(path.parent.name for path in (case_directory / "routes").glob("*/variants/*/route.json"))
+
+
+def _load_routes(cases_root: Path, case_id: str, case_directory: Path, arguments):
+    available = _saved_route_ids(case_directory)
+    requested = available if arguments.all_routes else list(arguments.route_id)
+    if not requested and available:
+        requested = [available[0]]
+    return tuple(load_resolved_route(cases_root, case_id, route_id) for route_id in requested)
+
+
+def _route_overlay(environment_case: EnvironmentCase, route, color) -> GenesisRouteOverlay:
+    positions = route.points[["x_m", "y_m", "z_m"]].to_numpy(dtype=np.float64).copy()
+    positions[:, 2] += 0.8
+    waypoints = []
+    for waypoint in route.waypoint_set.waypoints:
+        z_m = environment_case.heightmap.surface_elevation_at(waypoint.x_m, waypoint.y_m)
+        waypoints.append((waypoint.x_m, waypoint.y_m, z_m + 0.8))
+    return GenesisRouteOverlay(
+        route_id=route.definition.route_id,
+        positions=positions,
+        waypoints=np.asarray(waypoints, dtype=np.float64),
+        color=color,
+    )
 
 
 def main() -> int:
@@ -207,13 +333,37 @@ def main() -> int:
     usd_summary = read_environment_usd(usd_path)
     if usd_summary.meters_per_unit != 1.0 or usd_summary.up_axis != "Z":
         raise ValueError("environment.usd must use meters and Z-up coordinates")
+    layout = (
+        None
+        if arguments.mode == "environment"
+        else load_observation_point_layout(cases_root, arguments.case_id, arguments.layout_id)
+    )
+    selected_point = (
+        None
+        if layout is None
+        else _selected_point(layout, arguments.point_id, environment_case)
+    )
     viewer_options = create_viewer_options(
         environment_case,
         focus=arguments.focus,
         resolution=(arguments.width, arguments.height),
         camera_fov_deg=arguments.fov,
     )
+    if (
+        arguments.mode == "camera"
+        and selected_point is not None
+        and arguments.point_id is not None
+    ):
+        viewer_options = _camera_viewer_options(
+            selected_point, (arguments.width, arguments.height)
+        )
     _print_case_summary(environment_case, usd_path, viewer_options)
+    if layout is not None and selected_point is not None:
+        print(
+            f"Observation layout: {layout.layout_id}, "
+            f"points={len(layout.points)}, cameras={len(layout.camera_layout.cameras)}"
+        )
+        print(f"Selected observation point: {selected_point.point_id}")
 
     mesh_directory = arguments.mesh_cache.expanduser().resolve() / arguments.case_id
     mesh_assets = write_genesis_mesh_assets(environment_case, mesh_directory)
@@ -236,6 +386,80 @@ def main() -> int:
                 (0.85, 0.42, 0.08),
             )
         )
+    if layout is not None:
+        infrastructure = write_observation_infrastructure_assets(
+            layout,
+            case_directory / "observation_point_layouts" / layout.layout_id,
+        )
+        scene_layers = write_experiment_scene_layers(case_directory, layout.layout_id)
+        mesh_sources.extend(
+            (
+                GenesisMeshSource(
+                    "observation_poles", infrastructure.poles, (0.18, 0.18, 0.20)
+                ),
+                GenesisMeshSource(
+                    "camera_housings",
+                    infrastructure.camera_housings,
+                    (0.05, 0.18, 0.30),
+                ),
+            )
+        )
+        print(f"Infrastructure USD: {infrastructure.infrastructure_usda}")
+        print(f"Composed USD scene: {scene_layers.scene_usda}")
+
+    needs_visibility = arguments.mode in {"visibility", "validation", "all"} or arguments.check_only
+    needs_routes = arguments.mode in {"route", "validation", "all"} or arguments.check_only
+    visibility_map = None
+    visibility_overlay = None
+    if needs_visibility:
+        visibility_file = _visibility_path(case_directory, layout.layout_id)
+        visibility_map = load_visibility_map(visibility_file)
+        visible, hidden = visibility_overlay_positions(
+            environment_case,
+            visibility_map,
+            max_points_per_class=arguments.visibility_max_points,
+        )
+        visibility_overlay = GenesisVisibilityOverlay(visible, hidden)
+        print(
+            f"Visibility map: {visibility_file.name}, "
+            f"visible UI points={len(visible):,}, hidden UI points={len(hidden):,}"
+        )
+    routes = _load_routes(
+        cases_root, arguments.case_id, case_directory, arguments
+    ) if needs_routes else ()
+    colors = (
+        (1.0, 0.10, 0.75, 0.98),
+        (0.05, 0.90, 1.0, 0.98),
+        (0.75, 0.20, 1.0, 0.98),
+        (0.65, 1.0, 0.05, 0.98),
+    )
+    route_overlays = tuple(
+        _route_overlay(environment_case, route, colors[index % len(colors)])
+        for index, route in enumerate(routes)
+    )
+    for route in routes:
+        print(f"Route: {route.definition.route_id}, {route.length_m:.1f} m")
+
+    report = None
+    validation_rays = ()
+    if visibility_map is not None and not arguments.no_report:
+        if layout is None:
+            raise RuntimeError("visibility validation requires an observation layout")
+        report = build_phase7_validation_report(
+            environment_case, layout, visibility_map, routes
+        )
+        report_path = save_phase7_validation_report(cases_root, report)
+        validation_rays = tuple(
+            GenesisValidationRay(
+                start=tuple(sample["ray_start"]),
+                end=tuple(sample["ray_end"]),
+                visible=sample["recomputed_class"] == "FULLY_VISIBLE",
+                reason=sample["recomputed_failure"],
+            )
+            for sample in report["representative_visibility_samples"]
+            if sample["ray_start"] is not None and sample["ray_end"] is not None
+        )
+        print(f"Validation report: {report_path} ({report['status']})")
     print("Genesis mesh assets:")
     for source in mesh_sources:
         print(f"  {source.name}: {source.path} ({source.path.stat().st_size / (1024 * 1024):.1f} MiB)")
@@ -246,7 +470,7 @@ def main() -> int:
         if not genesis_status.mesh_support_available:
             return 2
         print("Check completed; no viewer window was opened.")
-        return 0
+        return 0 if report is None or report["status"] == "passed" else 3
     if not genesis_status.mesh_support_available:
         raise RuntimeError(genesis_status.reason)
     if not os.environ.get("DISPLAY"):
@@ -262,6 +486,20 @@ def main() -> int:
         viewer_options=viewer_options,
         collision=False,
     )
+    if layout is not None and selected_point is not None:
+        draw_genesis_experiment_overlays(
+            genesis_scene,
+            layout,
+            selected_point_id=selected_point.point_id,
+            show_fov=arguments.mode in {"camera", "validation", "all"},
+            visibility=(
+                visibility_overlay
+                if arguments.mode in {"visibility", "validation", "all"}
+                else None
+            ),
+            routes=route_overlays,
+            rays=validation_rays if arguments.mode in {"validation", "all"} else (),
+        )
     print(f"Genesis loaded {len(genesis_scene.entities)} scene entities.")
     run_genesis_viewer(genesis_scene)
     return 0

@@ -58,13 +58,27 @@ def create_fixed_camera_layout(
     return CameraLayout(layout_id=layout_id, cameras=tuple(cameras))
 
 
-def camera_forward_vector(camera: CameraSpec) -> np.ndarray:
+def camera_rotation_matrix(camera: CameraSpec) -> np.ndarray:
     yaw = camera.orientation.yaw_rad
     pitch = camera.orientation.pitch_rad
-    return np.array(
-        [np.cos(yaw) * np.cos(pitch), np.sin(yaw) * np.cos(pitch), -np.sin(pitch)],
-        dtype=float,
+    roll = camera.orientation.roll_rad
+    cos_yaw, sin_yaw = np.cos(yaw), np.sin(yaw)
+    cos_pitch, sin_pitch = np.cos(pitch), np.sin(pitch)
+    cos_roll, sin_roll = np.cos(roll), np.sin(roll)
+    rotate_z = np.array(
+        ((cos_yaw, -sin_yaw, 0.0), (sin_yaw, cos_yaw, 0.0), (0.0, 0.0, 1.0))
     )
+    rotate_y = np.array(
+        ((cos_pitch, 0.0, sin_pitch), (0.0, 1.0, 0.0), (-sin_pitch, 0.0, cos_pitch))
+    )
+    rotate_x = np.array(
+        ((1.0, 0.0, 0.0), (0.0, cos_roll, -sin_roll), (0.0, sin_roll, cos_roll))
+    )
+    return rotate_z @ rotate_y @ rotate_x
+
+
+def camera_forward_vector(camera: CameraSpec) -> np.ndarray:
+    return camera_rotation_matrix(camera)[:, 0]
 
 
 def save_camera_layout(

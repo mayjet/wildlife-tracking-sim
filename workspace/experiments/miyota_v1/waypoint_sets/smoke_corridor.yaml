@@ -1,0 +1,9 @@
+waypoint_set_id: miyota-smoke-corridor-v1
+case_id: MiyotaMtBase_gsi_3km_v1
+waypoints:
+  - id: WP001
+    x_m: -120.021728
+    y_m: -195.0
+  - id: WP002
+    x_m: -80.021728
+    y_m: -195.0

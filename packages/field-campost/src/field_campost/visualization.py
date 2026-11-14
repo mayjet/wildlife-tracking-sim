@@ -6,7 +6,7 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from shapely.geometry import shape
-from shepherd_contracts import CameraLayout
+from shepherd_contracts import CameraLayout, ObservationPointLayout
 
 from field_environment import (
     EnvironmentCase,
@@ -42,6 +42,31 @@ def plot_camera_layout_2d(
             length_includes_head=True,
         )
         axes.annotate(camera.camera_id, (camera.position.x_m, camera.position.y_m))
+    return figure, axes
+
+
+def plot_observation_point_layout_2d(
+    environment_case: EnvironmentCase,
+    layout: ObservationPointLayout,
+    *,
+    ax: Axes | None = None,
+) -> tuple[Figure, Axes]:
+    figure, axes = plot_terrain_2d(
+        environment_case.heightmap,
+        environment_case.farm_boundary,
+        ax=ax,
+        title=f"Observation points: {layout.layout_id}",
+    )
+    if layout.points:
+        axes.scatter(
+            [point.position.x_m for point in layout.points],
+            [point.position.y_m for point in layout.points],
+            marker="^",
+            s=18,
+            color="black",
+            label=f"Observation points ({len(layout.points)})",
+        )
+        axes.legend()
     return figure, axes
 
 

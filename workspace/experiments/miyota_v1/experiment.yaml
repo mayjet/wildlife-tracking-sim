@@ -1,0 +1,27 @@
+experiment_id: miyota-phase7-v1
+case_id: MiyotaMtBase_gsi_3km_v1
+
+placements:
+  - placements/grid40_cam6.yaml
+  - placements/uniform_cam6.yaml
+
+routes:
+  - routes/smoke_direct.yaml
+  - routes/smoke_meandering.yaml
+
+seeds: [42]
+matrix:
+  mode: cartesian
+
+visibility:
+  preview_cell_size_m: 40.0
+  intermediate_cell_size_m: 10.0
+  evaluation_cell_size_m: 1.0
+  deer_height_m: 1.5
+  sample_heights_m: [0.0, 0.75, 1.5]
+
+simulation:
+  speed_mps: 1.5
+  step_s: 1.0
+  truth_id: deer-001
+  age_class: UNKNOWN

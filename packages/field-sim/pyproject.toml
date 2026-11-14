@@ -14,9 +14,14 @@ dependencies = [
     "pyarrow>=14,<23",
     "pydantic>=2.5,<3",
     "PyYAML>=6,<7",
+    "shapely>=2,<3",
     "field-environment>=0.1,<0.2",
+    "field-campost>=0.1,<0.2",
     "shepherd-contracts>=0.1,<0.2",
 ]
+
+[project.optional-dependencies]
+notebook = ["ipympl>=0.9,<1", "ipywidgets>=8,<9"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

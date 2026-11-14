@@ -34,6 +34,10 @@ cases/<case_id>/           Case単位の入力・生成物・結果
 
 ## 実行時データフロー
 
+Phase 7の実験条件は`04_simulation.ipynb`のPython宣言を正本とする．authoring層がコメント付きYAMLを`workspace/experiments/generated/<experiment_id>/`へ生成し，既存の配置・ルート・batch APIへ渡す．`experiment.yaml`は配置宣言，ルート宣言，seedを参照し，直積の実験表を保存する生成物である．標準配置は`grid`と`uniform`である．事前確定ルートでは複数のWaypoint Setを地図GUIで保存し，各Setから標準の`smooth`と`meandering`を生成する．Waypointはルート入力方式の一つであり，将来の探索・行動モデルとは分離する．研究用拡張は`workspace/placement/`と`workspace/behavior/routes/`に置き，方式名と同名moduleを明示的に読み込む．
+
+Waypointは研究者が必ず通過させたい地点，Resolved Routeは約1 m間隔の確定経路，Trajectoryは速度と時刻を与えたGround Truthであり，別々の成果物として扱う．標準ルート生成はCaseのTraversabilityを参照し，禁止Waypointの近傍補正，区間ごとのA*迂回，曲線・蛇行幅の安全側調整を順に行う．元Waypointと補正後座標，迂回区間，最終パラメータはResolved Routeへ記録する．配置と確定ルートはIDで不変とし，変更時は親IDを記録できる新しいIDを作る．
+
 ```text
 Case -> Environment -> Simulation Backend -> Ground Truth
                                       |          |
@@ -161,7 +165,7 @@ Case操作は`create`，`load`，`edit`を区別する．`create`は既存Case�
 
 環境判定は，国土地理院RGBタイル，JAXA土地被覆，傾斜，国土地理院ベクトルタイルの建物外周をCase座標へ揃える．建物の名称・高さは取得できる場合だけOSMで補完し，取得失敗と地物なしを区別する．開放地の連続性，細い森林帯，囲まれた領域，指定座標，建物との距離から牧場候補の塊を選び，研究者の明示設定後に監視範囲として確定する．入力，閾値，面積，件数は`case.yaml`の処理記録へ保存する．
 
-USD森林と建物は取得した2D外周を地表から高さ方向へ押し出し，上面・下面・全側面を持つ閉立体Meshで表現する．森林は地形へ追従し，標準高を10 mとする．実高さがない建物には設定値を使い，仮定値であることを地物属性へ残す．元の3 km地形と地物はCaseへ保持し，3D生成時だけ確定牧場を囲む`scene_crop.geojson`で切り出す．USDを将来のSimulatorを含む交換形式とし，Genesis用OBJは同じCase形状から生成するadapterである．`field_summary.json`にはクロップ寸法，面積，高低差，傾斜，地物面積，Mesh規模を保存する．これらは3D確認用であり，Phase 7まで遮蔽計算には使わない．
+USD森林と建物は取得した2D外周を地表から高さ方向へ押し出し，上面・下面・全側面を持つ閉立体Meshで表現する．森林は地形へ追従し，標準高を10 mとする．実高さがない建物には設定値を使い，仮定値であることを地物属性へ残す．元の3 km地形と地物はCaseへ保持し，3D生成時だけ確定牧場を囲む`scene_crop.geojson`で切り出す．USDを将来のSimulatorを含む交換形式とし，Genesis用OBJは同じCase形状から生成するadapterである．`field_summary.json`にはクロップ寸法，面積，高低差，傾斜，地物面積，Mesh規模を保存する．Phase 7の遮蔽計算はUSDを解析せず，同じCase外周・高さ・平滑化条件を直接使用する．
 
 ## Phase 6 最小Simulator層
 
@@ -176,3 +180,24 @@ workspace/04_simulation.ipynb
 ```
 
 `SimulationConfig`はCase ID，Dataset ID，seed，duration，step，個体属性とmotionを保持する．`simulate()`はmeshの三角形分割と同じ面上線形補間でzを算出し，時刻0から終了時刻まで`GroundTruthFrame`を生成する．Ground Truthは`ground_truth.parquet`へ保存し，`DatasetManifest`にはCase hash，motion，地表補間法，Observation未生成状態を記録する．Phase 6は観測ファイルを生成せず，Trackerへの経路を持たない．
+
+## Phase 7 観測層
+
+```text
+Case + ObservationPointLayout + GroundTruthFrame
+                    |
+                    v
+        field-sim AnalyticRaycastBackend
+          distance / horizontal+vertical FOV
+          terrain / forest / building occlusion
+                    |
+                    +--> ObservationFrame
+                    +--> 2D VisibilityMap
+                    +--> observations.parquet
+```
+
+観測点配置は`field-campost`が生成する．標準は40 m正方gridの中心と，同じ観測点数の決定的な最大最小距離配置である．森林・建物内と牧場外を除外し，5 mポール上へ3〜6台のCameraを等角度で取り付ける．6台・水平FOV 60°は理論上360°を覆うが，境界重複は観測点内で1件へ集約する．
+
+遮蔽判定はGenesis sceneやUSD Cameraを状態の正本にせず，CaseのHeightmapと森林・建物PolygonからCPU上で解析的なrayを評価する．森林はUSD/Genesisと同じ平滑化済み外周，地表追従，高さ10 mを用い，建物は取得外周と記録高または仮定高を用いる．raycast失敗を可視扱いへfallbackしない．鹿の地表，0.75 m，1.5 mを個別判定し，`full_body`，`upper_body`，`any_part`を実験条件として区別する．
+
+2D可視範囲は3D判定を設定可能なgridへ投影した確認・配置評価用cacheである．鹿の運動と本番観測は連続座標で直接判定し，可視gridやTerrain cellへ位置を丸めない．

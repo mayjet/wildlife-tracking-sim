@@ -28,6 +28,8 @@ from .environment import (
     CaseSpec,
     EnvironmentDataRefs,
     FarmBoundarySpec,
+    ObservationPointLayout,
+    ObservationPointSpec,
 )
 from .ground_truth import GroundTruthFrame, GroundTruthState
 from .manifests import AlgorithmSpec, DatasetManifest, RunManifest, RunStatus
@@ -72,6 +74,8 @@ __all__ = [
     "LocalEnvironmentView",
     "Observation",
     "ObservationFrame",
+    "ObservationPointLayout",
+    "ObservationPointSpec",
     "Particle2D",
     "ParticlePositionDistribution",
     "PlacementConstraints",

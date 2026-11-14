@@ -13,11 +13,13 @@ from .case import (
     validate_case_directory,
     validate_environment_case,
 )
+from .authoring import AuthoredEnvironmentConfig, author_environment_config
 from .config import (
     CaseMode,
     EnvironmentConfig,
     EnvironmentDetectionConfig,
     EnvironmentFeaturesConfig,
+    FarmConfig,
     FeatureInputConfig,
     FileTerrainConfig,
     FixedCameraConfig,
@@ -115,6 +117,7 @@ from .visualization import (
 from .workflow import EnvironmentWorkflowResult, run_environment_workflow
 
 __all__ = [
+    "AuthoredEnvironmentConfig",
     "CaseValidationError",
     "CaseMode",
     "EnvironmentConfig",
@@ -124,6 +127,7 @@ __all__ = [
     "ProcessingStep",
     "EnvironmentFeaturesConfig",
     "EnvironmentWorkflowResult",
+    "FarmConfig",
     "FarmBoundary",
     "FarmComplexResult",
     "FeatureInputConfig",
@@ -163,6 +167,7 @@ __all__ = [
     "acquire_worldcover",
     "calculate_terrain_quality",
     "apply_scene_config",
+    "author_environment_config",
     "build_monitoring_boundary",
     "centered_grid",
     "combine_heightmaps",

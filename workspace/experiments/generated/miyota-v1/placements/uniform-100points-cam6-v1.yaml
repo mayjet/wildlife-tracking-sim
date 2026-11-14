@@ -1,0 +1,16 @@
+layout_id: uniform-100points-cam6-v1  # 保存する配置ID
+method: uniform  # 使用する配置方式
+seed: 42  # 配置を再現するseed
+mount:  # 観測ポールとカメラの条件
+  pole_height_m: 5.0  # 地表からのポール高さm
+  camera_count: 6  # 1観測点のカメラ台数
+  horizontal_fov_deg: 60.0  # 水平視野角degree
+  vertical_fov_deg: 48.0  # 垂直視野角degree
+  max_observation_distance_m: 42.0  # 最大視認距離m
+  observation_interval_s: 1.0  # 観測する時間間隔s
+  first_yaw_deg: 0.0  # 1台目の水平方向degree
+  pitch_deg: null  # 固定俯角．nullなら自動計算
+  pitch_target_height_m: 0.75  # 俯角計算で見る地表高m
+  pitch_reference_distance_m: 20.0  # 俯角計算の基準距離m
+parameters:  # 配置方式固有の設定
+  point_count: 100  # 等分散する観測点数

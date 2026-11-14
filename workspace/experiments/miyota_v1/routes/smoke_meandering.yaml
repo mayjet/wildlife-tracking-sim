@@ -1,0 +1,9 @@
+route_id: miyota-smoke-meandering-v1
+route_group_id: miyota-smoke-corridor-v1
+method: meandering
+waypoint_set: ../waypoint_sets/smoke_corridor.yaml
+seed: 42
+parameters:
+  point_spacing_m: 1.0
+  max_lateral_offset_m: 5.0
+  meander_interval_m: 20.0

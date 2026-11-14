@@ -1,0 +1,9 @@
+route_id: miyota-corridor-v1-meandering-v1  # 保存する確定ルートID
+route_group_id: miyota-corridor-v1  # 入力Waypoint集合のID
+method: meandering  # 使用するルート生成方式
+waypoint_set: ../waypoint_sets/miyota-corridor-v1.yaml  # 入力Waypointの保存先
+seed: 42  # ルート形状を再現するseed
+parameters:  # ルート方式固有の設定
+  max_lateral_offset_m: 5.0  # 蛇行の最大横幅m
+  meander_interval_m: 20.0  # 蛇行周期の目安m
+  point_spacing_m: 1.0  # 詳細経路点の間隔m

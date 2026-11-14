@@ -5,7 +5,7 @@ from pathlib import PurePosixPath
 
 from pydantic import Field, field_validator, model_validator
 
-from ._base import ContractModel
+from ._base import ContractModel, JsonValue
 from .coordinates import (
     AxisAlignedBounds2D,
     CameraOrientation,
@@ -75,3 +75,34 @@ class CameraLayout(ContractModel):
             raise ValueError("camera_id values must be unique within a layout")
         return self
 
+
+class ObservationPointSpec(ContractModel):
+    point_id: str = Field(min_length=1)
+    position: Position3D
+    camera_ids: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_unique_camera_ids(self) -> "ObservationPointSpec":
+        if len(self.camera_ids) != len(set(self.camera_ids)):
+            raise ValueError("camera_ids must be unique within an observation point")
+        return self
+
+
+class ObservationPointLayout(ContractModel):
+    layout_id: str = Field(min_length=1)
+    points: tuple[ObservationPointSpec, ...]
+    camera_layout: CameraLayout
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_layout_membership(self) -> "ObservationPointLayout":
+        point_ids = [point.point_id for point in self.points]
+        if len(point_ids) != len(set(point_ids)):
+            raise ValueError("point_id values must be unique within a layout")
+        assigned = [camera_id for point in self.points for camera_id in point.camera_ids]
+        if len(assigned) != len(set(assigned)):
+            raise ValueError("a camera cannot belong to multiple observation points")
+        camera_ids = {camera.camera_id for camera in self.camera_layout.cameras}
+        if set(assigned) != camera_ids:
+            raise ValueError("observation points must assign every CameraLayout camera exactly once")
+        return self

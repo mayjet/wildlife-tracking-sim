@@ -12,6 +12,8 @@ from shepherd_contracts import (
     CameraSpec,
     CaseSpec,
     LocalCoordinateSystem,
+    ObservationPointLayout,
+    ObservationPointSpec,
     Position3D,
 )
 
@@ -73,3 +75,48 @@ def test_camera_layout_rejects_duplicate_ids() -> None:
     )
     with pytest.raises(ValidationError):
         CameraLayout(layout_id="duplicate", cameras=(camera, camera))
+
+
+def test_observation_point_layout_assigns_all_cameras() -> None:
+    camera = CameraSpec(
+        camera_id="point-001-cam-01",
+        position=Position3D(x_m=1.0, y_m=2.0, z_m=5.0),
+        orientation=CameraOrientation(yaw_rad=0.0, pitch_rad=0.0, roll_rad=0.0),
+        horizontal_fov_rad=1.0,
+        vertical_fov_rad=0.8,
+        max_observation_distance_m=42.0,
+        observation_interval_s=1.0,
+    )
+    camera_layout = CameraLayout(layout_id="resolved", cameras=(camera,))
+    layout = ObservationPointLayout(
+        layout_id="points",
+        points=(
+            ObservationPointSpec(
+                point_id="point-001",
+                position=camera.position,
+                camera_ids=(camera.camera_id,),
+            ),
+        ),
+        camera_layout=camera_layout,
+        metadata={"placement_method": "test"},
+    )
+
+    assert layout.points[0].camera_ids == (camera.camera_id,)
+
+
+def test_observation_point_layout_rejects_unassigned_camera() -> None:
+    camera = CameraSpec(
+        camera_id="camera-01",
+        position=Position3D(x_m=1.0, y_m=2.0, z_m=5.0),
+        orientation=CameraOrientation(yaw_rad=0.0, pitch_rad=0.0, roll_rad=0.0),
+        horizontal_fov_rad=1.0,
+        vertical_fov_rad=0.8,
+        max_observation_distance_m=42.0,
+        observation_interval_s=1.0,
+    )
+    with pytest.raises(ValidationError, match="assign every"):
+        ObservationPointLayout(
+            layout_id="invalid",
+            points=(),
+            camera_layout=CameraLayout(layout_id="resolved", cameras=(camera,)),
+        )

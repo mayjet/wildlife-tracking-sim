@@ -1,0 +1,11 @@
+waypoint_set_id: miyota-corridor-v1  # Waypoint集合のID
+case_id: MiyotaMtBase_gsi_3km_v1  # 使用する農場Case
+waypoints:  # 必ず通過させる地点
+- id: WP001  # Waypointの識別子
+  x_m: -120.021728  # Case原点から東方向m
+  y_m: -195.0  # Case原点から北方向m
+  dwell_s: 0.0  # この地点で停止する秒数
+- id: WP002  # Waypointの識別子
+  x_m: -80.021728  # Case原点から東方向m
+  y_m: -195.0  # Case原点から北方向m
+  dwell_s: 0.0  # この地点で停止する秒数

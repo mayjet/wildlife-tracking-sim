@@ -51,6 +51,8 @@ class GenesisMeshSource:
     name: str
     path: Path
     color: tuple[float, float, float]
+    opacity: float = 1.0
+    double_sided: bool = True
 
 
 def inspect_genesis() -> GenesisStatus:
@@ -182,7 +184,13 @@ def build_genesis_mesh_scene(
     if not sources:
         raise ValueError("at least one Genesis mesh source is required")
     resolved_sources = tuple(
-        GenesisMeshSource(source.name, source.path.expanduser().resolve(), source.color)
+        GenesisMeshSource(
+            source.name,
+            source.path.expanduser().resolve(),
+            source.color,
+            source.opacity,
+            source.double_sided,
+        )
         for source in sources
     )
     missing = [source.path for source in resolved_sources if not source.path.is_file()]
@@ -211,8 +219,10 @@ def build_genesis_mesh_scene(
             ),
             surface=gs.surfaces.Default(
                 color=source.color,
+                opacity=source.opacity,
                 roughness=0.9,
                 metallic=0.0,
+                double_sided=source.double_sided,
             ),
             vis_mode="visual",
             name=source.name,

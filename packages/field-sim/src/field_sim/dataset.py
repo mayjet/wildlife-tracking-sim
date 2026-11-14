@@ -13,6 +13,10 @@ from shepherd_contracts import (
     DatasetManifest,
     GroundTruthFrame,
     GroundTruthState,
+    Observation,
+    ObservationFrame,
+    ObservationPointLayout,
+    Position2D,
     Position3D,
     Velocity2D,
 )
@@ -21,6 +25,7 @@ from field_environment import load_case, resolve_case_path, validate_case_id
 
 from .config import SimulationConfig
 from .simulator import SimulationResult, simulate
+from .observations import ObservationResult, VisibilityConfig, generate_observations
 
 
 @dataclass(frozen=True)
@@ -28,6 +33,7 @@ class SavedDataset:
     manifest: DatasetManifest
     frames: tuple[GroundTruthFrame, ...]
     directory: Path
+    observation_frames: tuple[ObservationFrame, ...] = ()
 
 
 def _validate_dataset_id(dataset_id: str) -> str:
@@ -71,6 +77,33 @@ def _frames_to_dataframe(frames: tuple[GroundTruthFrame, ...]) -> pd.DataFrame:
                 }
             )
     return pd.DataFrame(rows)
+
+
+def _observations_to_dataframe(frames: tuple[ObservationFrame, ...]) -> pd.DataFrame:
+    rows = []
+    for frame in frames:
+        for observation in frame.observations:
+            rows.append(
+                {
+                    "timestamp_s": observation.timestamp_s,
+                    "camera_id": observation.camera_id,
+                    "observation_id": observation.observation_id,
+                    "x_m": observation.position.x_m,
+                    "y_m": observation.position.y_m,
+                    "age_class": observation.age_class.value,
+                }
+            )
+    return pd.DataFrame(
+        rows,
+        columns=(
+            "timestamp_s",
+            "camera_id",
+            "observation_id",
+            "x_m",
+            "y_m",
+            "age_class",
+        ),
+    )
 
 
 def save_simulation_dataset(
@@ -160,7 +193,192 @@ def load_simulation_dataset(
                 )
             )
         frames.append(GroundTruthFrame(timestamp_s=float(timestamp_s), states=tuple(states)))
-    return SavedDataset(manifest=manifest, frames=tuple(frames), directory=directory)
+    observation_frames = []
+    observation_path = directory / "observations.parquet"
+    if observation_path.is_file():
+        observation_table = pd.read_parquet(observation_path, engine="pyarrow")
+        grouped = {
+            float(timestamp_s): group
+            for timestamp_s, group in observation_table.groupby("timestamp_s", sort=True)
+        }
+        for frame in frames:
+            observations = []
+            group = grouped.get(frame.timestamp_s)
+            if group is not None:
+                for row in group.itertuples(index=False):
+                    observations.append(
+                        Observation(
+                            timestamp_s=float(row.timestamp_s),
+                            camera_id=row.camera_id,
+                            observation_id=row.observation_id,
+                            position=Position2D(x_m=float(row.x_m), y_m=float(row.y_m)),
+                            age_class=AgeClass(row.age_class),
+                        )
+                    )
+            observation_frames.append(
+                ObservationFrame(
+                    timestamp_s=frame.timestamp_s,
+                    observations=tuple(observations),
+                )
+            )
+    return SavedDataset(
+        manifest=manifest,
+        frames=tuple(frames),
+        directory=directory,
+        observation_frames=tuple(observation_frames),
+    )
+
+
+def save_observation_dataset(
+    cases_root: str | Path,
+    simulation_result: SimulationResult,
+    observation_result: ObservationResult,
+    *,
+    overwrite: bool = False,
+) -> SavedDataset:
+    case_directory = resolve_case_path(cases_root, simulation_result.config.case_id)
+    dataset_id = _validate_dataset_id(simulation_result.config.dataset_id)
+    destination = case_directory / "datasets" / dataset_id
+    if destination.exists() and not overwrite:
+        raise FileExistsError(f"Dataset already exists: {destination}")
+    ground_truth_ref = f"datasets/{dataset_id}/ground_truth.parquet"
+    observation_ref = f"datasets/{dataset_id}/observations.parquet"
+    manifest = DatasetManifest(
+        schema_version="1.0",
+        case_id=simulation_result.config.case_id,
+        dataset_id=dataset_id,
+        seed=simulation_result.config.seed,
+        duration_s=simulation_result.config.duration_s,
+        simulation_step_s=simulation_result.config.step_s,
+        scenario_config={
+            "case_sha256": _case_hash(case_directory),
+            "individual_count": sum(len(frame.states) for frame in simulation_result.frames[:1]),
+            "truth_id": simulation_result.config.truth_id,
+            "motion": simulation_result.config.motion.model_dump(mode="json"),
+            "age_class": simulation_result.config.age_class.value,
+            "surface_interpolation": "piecewise triangular, matching TerrainMesh faces",
+            "observation_data_status": "generated_phase7",
+            "observation_point_layout_id": observation_result.layout.layout_id,
+            "visibility": observation_result.config.model_dump(mode="json"),
+        },
+        observation_data_ref=observation_ref,
+        ground_truth_data_ref=ground_truth_ref,
+    )
+    temporary = destination.parent / f".{dataset_id}.tmp-{uuid4().hex}"
+    temporary.mkdir()
+    try:
+        _frames_to_dataframe(simulation_result.frames).to_parquet(
+            temporary / "ground_truth.parquet", index=False, engine="pyarrow"
+        )
+        _observations_to_dataframe(observation_result.frames).to_parquet(
+            temporary / "observations.parquet", index=False, engine="pyarrow"
+        )
+        (temporary / "manifest.json").write_text(
+            manifest.model_dump_json(indent=2), encoding="utf-8"
+        )
+        (temporary / "simulation_config.json").write_text(
+            simulation_result.config.model_dump_json(indent=2), encoding="utf-8"
+        )
+        (temporary / "visibility_config.json").write_text(
+            observation_result.config.model_dump_json(indent=2), encoding="utf-8"
+        )
+        (temporary / "observation_point_layout.json").write_text(
+            observation_result.layout.model_dump_json(indent=2), encoding="utf-8"
+        )
+        if destination.exists():
+            shutil.rmtree(destination)
+        temporary.replace(destination)
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    return SavedDataset(
+        manifest=manifest,
+        frames=simulation_result.frames,
+        directory=destination,
+        observation_frames=observation_result.frames,
+    )
+
+
+def run_and_save_observation_dataset(
+    cases_root: str | Path,
+    config: SimulationConfig,
+    layout: ObservationPointLayout,
+    visibility_config: VisibilityConfig | None = None,
+    *,
+    overwrite: bool = False,
+) -> SavedDataset:
+    environment_case = load_case(cases_root, config.case_id)
+    simulation_result = simulate(environment_case, config)
+    observation_result = generate_observations(
+        environment_case,
+        layout,
+        simulation_result.frames,
+        visibility_config,
+    )
+    return save_observation_dataset(
+        cases_root,
+        simulation_result,
+        observation_result,
+        overwrite=overwrite,
+    )
+
+
+def save_observations_for_layout(
+    cases_root: str | Path,
+    case_id: str,
+    dataset_id: str,
+    layout: ObservationPointLayout,
+    visibility_config: VisibilityConfig | None = None,
+    *,
+    overwrite: bool = False,
+) -> Path:
+    """Add one layout-specific Observation table to a shared Ground Truth Dataset."""
+    environment_case = load_case(cases_root, case_id)
+    saved = load_simulation_dataset(cases_root, case_id, dataset_id)
+    resolved_config = visibility_config or VisibilityConfig()
+    observation_result = generate_observations(
+        environment_case,
+        layout,
+        saved.frames,
+        resolved_config,
+    )
+    observation_directory = saved.directory / "observations" / layout.layout_id
+    if observation_directory.exists() and not overwrite:
+        raise FileExistsError(f"Observation set already exists: {observation_directory}")
+    temporary = observation_directory.parent / f".{layout.layout_id}.tmp-{uuid4().hex}"
+    temporary.mkdir(parents=True, exist_ok=False)
+    try:
+        _observations_to_dataframe(observation_result.frames).to_parquet(
+            temporary / "observations.parquet", index=False, engine="pyarrow"
+        )
+        (temporary / "visibility_config.json").write_text(
+            resolved_config.model_dump_json(indent=2), encoding="utf-8"
+        )
+        (temporary / "observation_point_layout.json").write_text(
+            layout.model_dump_json(indent=2), encoding="utf-8"
+        )
+        manifest = {
+            "schema_version": "1.0",
+            "case_id": case_id,
+            "dataset_id": dataset_id,
+            "layout_id": layout.layout_id,
+            "ground_truth_ref": "../../ground_truth.parquet",
+            "observations_ref": "observations.parquet",
+            "observation_count": sum(
+                len(frame.observations) for frame in observation_result.frames
+            ),
+            "truth_fields_excluded": True,
+        }
+        (temporary / "manifest.json").write_text(
+            json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        if observation_directory.exists():
+            shutil.rmtree(observation_directory)
+        temporary.replace(observation_directory)
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    return observation_directory
 
 
 def run_and_save_simulation(

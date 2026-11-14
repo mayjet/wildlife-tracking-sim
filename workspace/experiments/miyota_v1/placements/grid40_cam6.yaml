@@ -1,0 +1,16 @@
+layout_id: grid40-cam6-v1
+method: grid40
+seed: 42
+
+mount:
+  pole_height_m: 5.0
+  camera_count: 6
+  horizontal_fov_deg: 60.0
+  vertical_fov_deg: 48.0
+  max_observation_distance_m: 42.0
+  observation_interval_s: 1.0
+  pitch_target_height_m: 0.75
+  pitch_reference_distance_m: 20.0
+
+parameters:
+  spacing_m: 40.0

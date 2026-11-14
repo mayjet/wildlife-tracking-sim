@@ -1,0 +1,7 @@
+route_id: miyota-corridor-v1-direct-v1  # 保存する確定ルートID
+route_group_id: miyota-corridor-v1  # 入力Waypoint集合のID
+method: direct  # 使用するルート生成方式
+waypoint_set: ../waypoint_sets/miyota-corridor-v1.yaml  # 入力Waypointの保存先
+seed: 42  # ルート形状を再現するseed
+parameters:  # ルート方式固有の設定
+  point_spacing_m: 1.0  # 詳細経路点の間隔m

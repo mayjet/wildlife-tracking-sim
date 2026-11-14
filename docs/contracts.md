@@ -19,6 +19,21 @@
 
 `CaseSpec`はCase ID，座標系，環境データ参照，牧場境界参照とboundsを持つ．参照先は`cases/<case_id>/`からの相対pathで，絶対pathと`..`を拒否する．`CameraSpec`は3D位置，姿勢，水平・垂直FOV，最大観測距離，観測間隔を持つ．42 mは`DEFAULT_MAX_OBSERVATION_DISTANCE_M`という標準設定であり，Schema fieldの暗黙defaultではない．`CameraLayout`は一意なcamera IDを持つカメラ集合である．
 
+`ObservationPointSpec`は5 mポール等の共通取付点と所属Camera IDを表す．`ObservationPointLayout`は観測点集合，解決済み`CameraLayout`，生成条件metadataを保持し，全Cameraがちょうど1つの観測点へ所属することを検証する．ユーザー指定はCamera台数を中心とし，等間隔yaw，pitch，Camera IDは配置層で解決して保存する．
+
+```python
+point = ObservationPointSpec(
+    point_id="grid40-r001c002",
+    position=Position3D(x_m=20.0, y_m=60.0, z_m=905.0),
+    camera_ids=("grid40-r001c002-cam-01", "grid40-r001c002-cam-02"),
+)
+layout = ObservationPointLayout(
+    layout_id="default-grid40-cam2",
+    points=(point,),
+    camera_layout=camera_layout,
+)
+```
+
 Phase 3では`FixedCameraPlacement`が地表基準の設置条件を`CameraSpec`へ変換する．永続化形式`camera_layout.json`は`CameraLayout.model_dump_json()`のJSONであり，独自のCamera Schemaを追加しない．`CaseSpec.environment.environment_usd`は`environment.usd`を参照する．Camera Layout pathはCase内の固定規約`camera_layout.json`とし，Phase 1 Contractsにはfieldを追加しない．
 
 ```python
@@ -85,6 +100,8 @@ truth_frame = GroundTruthFrame(timestamp_s=1.0, states=(truth,))
 ```
 
 `Observation`は時刻，camera ID，観測上のID，Perfect Observationとして得た2D位置，観測可能な年齢区分だけを持つ．位置ノイズ，共分散，真値IDは持たない．観測がないstepは空の`ObservationFrame`で表す．
+
+Phase 7では，同じ観測点のFOV境界で複数Cameraが同じ鹿を捉えた場合，光軸に近い1台へ決定的に集約する．異なる観測点からの観測は別Observationとして保持する．既定では年齢区分を`UNKNOWN`とし，真値の個体ID・群れIDを出力しない．
 
 ```python
 observation = Observation(

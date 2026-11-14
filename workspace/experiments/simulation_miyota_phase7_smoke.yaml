@@ -1,0 +1,12 @@
+case_id: MiyotaMtBase_gsi_3km_v1
+dataset_id: phase7_smoke_001
+seed: 42
+duration_s: 10
+step_s: 1
+truth_id: deer-001
+age_class: UNKNOWN
+motion:
+  kind: stationary
+  position:
+    x_m: -120.021728
+    y_m: -195.0

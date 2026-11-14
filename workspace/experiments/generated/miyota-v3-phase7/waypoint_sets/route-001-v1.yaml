@@ -1,0 +1,27 @@
+waypoint_set_id: route-001-v1  # Waypoint集合のID
+case_id: MiyotaMtBase_gsi_3km_v3  # 使用する農場Case
+waypoints:  # 必ず通過させる地点
+- id: WP001  # Waypointの識別子
+  x_m: 134.17353891937728  # Case原点から東方向m
+  y_m: -95.70513341570677  # Case原点から北方向m
+  dwell_s: 0.0  # この地点で停止する秒数
+- id: WP002  # Waypointの識別子
+  x_m: -143.7573631279049  # Case原点から東方向m
+  y_m: 57.63605392072486  # Case原点から北方向m
+  dwell_s: 0.0  # この地点で停止する秒数
+- id: WP003  # Waypointの識別子
+  x_m: -201.26030837906683  # Case原点から東方向m
+  y_m: 302.02357123816273  # Case原点から北方向m
+  dwell_s: 0.0  # この地点で停止する秒数
+- id: WP004  # Waypointの識別子
+  x_m: -62.29485735542562  # Case原点から東方向m
+  y_m: 560.7868248683912  # Case原点から北方向m
+  dwell_s: 0.0  # この地点で停止する秒数
+- id: WP005  # Waypointの識別子
+  x_m: -81.46250577247952  # Case原点から東方向m
+  y_m: 800.3824300815654  # Case原点から北方向m
+  dwell_s: 0.0  # この地点で停止する秒数
+- id: WP006  # Waypointの識別子
+  x_m: -311.47428677712696  # Case原点から東方向m
+  y_m: 920.180232688153  # Case原点から北方向m
+  dwell_s: 0.0  # この地点で停止する秒数

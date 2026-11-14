@@ -13,7 +13,7 @@
 | 4 | ALOS実地形取得 | Notebookで範囲指定・データ取得・座標変換 | 完了 |
 | 5 | 実地形Case完成 | 地形メッシュ・森林・建物・牧場境界・USD | 完了 |
 | 6 | シミュレーション基盤 | 鹿の2D真位置・時刻・単純な移動軌跡 | 完了 |
-| 7 | カメラ観測 | FOV・距離・3D遮蔽・Perfect Observation | 未着手 |
+| 7 | カメラ観測 | FOV・距離・3D遮蔽・Perfect Observation | 完了 |
 | 8 | Web 2D可視化 | Rerunで地形・カメラ・真位置・観測位置を表示 | 未着手 |
 | 9 | Tracker API | workspaceから追跡・予測手法を実行 | 未着手 |
 | 10 | 鹿の群れ行動 | リーダー・子供・探索・採食・追従 | 未着手 |
@@ -81,8 +81,8 @@
 - **目的**：FOV，距離，terrain/森林/建物遮蔽からPerfect Observationを生成する．
 - **編集対象**：`field-sim`観測層と幾何テスト．
 - **依存関係**：Phase 3 CameraLayout，Phase 5 3D環境，Phase 6真値．
-- **完了条件**：可視な鹿の2D位置だけをObservationへ変換し，真値専用情報を漏らさない．
-- **引き渡し**：時刻ごとのObservationFrame．
+- **完了条件**：5 mポール上の3〜6台固定Camera，Pythonから間隔を指定するgrid配置と点数を指定する等分散配置，複数Waypoint Setから生成するSmooth・Meandering確定ルート，距離・水平/垂直FOV，鹿の足元/胴/頭，terrain/森林/建物遮蔽を判定する．40 m previewと1 m正式評価を区別し，正式評価を途中保存・再開できる．可視な鹿の2D位置だけをObservationへ変換し，真値専用情報を漏らさない．
+- **引き渡し**：時刻ごとのObservationFrame，版管理された観測点配置と確定ルート，配置×ルート×seedの実験表，2D可視範囲，共有Ground Truthと配置別Observationを持つDataset．
 
 ## Phase 8：Web 2D可視化
 
