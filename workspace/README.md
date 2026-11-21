@@ -1,8 +1,8 @@
 # 実験環境の作成と確認
 
-## 1．YAMLを編集する
+## 1．Case条件をPythonで設定する
 
-`experiments/terrain_miyota_mt_base_gsi.yaml`で，Case ID，取得地点，範囲，解像度，牧場判定，3Dクロップ条件を設定する．
+`00_environment_python.ipynb`の先頭で，Case ID，取得地点，範囲，解像度，牧場判定，3Dクロップ条件を設定する．YAMLは再現用に自動生成されるため，通常は直接編集しない．
 
 主な項目は次のとおりである．
 
@@ -13,7 +13,7 @@
 - `scene.forest_height_m`：森林遮蔽領域の高さ
 - `cameras`：固定カメラ設定
 
-`mode: create`は同名Caseを上書きしない．作り直す場合は対象Caseを先に削除する．
+`mode="create"`は同名Caseを上書きしない．作り直す場合は対象Caseを先に削除する．
 
 ```bash
 rm -rf cases/MiyotaMtBase_gsi_3km_v1
@@ -49,13 +49,14 @@ FOV，可視点，ルート，検証線はViewer専用UIであり，物理衝突
 
 ## 4．観測実験を作成する
 
-`04_simulation.ipynb`の先頭でCase，カメラ配置，カメラ台数，ルート方式，seedをPythonで宣言する．Waypoint GUIセルまで実行して必要なSetを保存した後，残りのセルを実行する．YAMLはNotebookが再現用に自動生成するため，通常は編集しない．
+`04_simulation.ipynb`の先頭でCase，カメラ配置，カメラ台数，ルート方式，群れProfile，seedをPythonで宣言する．Waypoint GUIセルまで実行して必要なSetを保存した後，残りのセルを実行する．YAMLはNotebookが再現用に自動生成するため，通常は編集しない．
 
 ```python
 case_id = "MiyotaMtBase_gsi_3km_v1"
 camera_placements = [("grid", 40.0), ("uniform", 100)]
 camera_counts = [6]
 route_methods = ["smooth", "meandering"]
+herd_profiles = [{"profile_id": "herd-small", "deer_count": 5, ...}]
 seeds = [42]
 ```
 
@@ -64,3 +65,11 @@ seeds = [42]
 Notebookはコメント付きYAMLを`workspace/experiments/generated/<experiment_id>/`へ生成し，観測点，鹿の詳細ルート，足元・胴・頭の2D可視範囲を表示する．確定配置は`cases/<case_id>/observation_point_layouts/`，確定ルートは`routes/`，真値と配置別Perfect Observationは`datasets/`へ保存する．既存結果は明示しない限り上書きしない．
 
 表示先，コンテナ名，BackendはNotebook末尾の設定で変更できる．FOVの40 mはPhase 7の配置確認用表示距離であり，Perfect Observationの判定条件は保存済みCameraSpecを使用する．
+
+## 5．Trackerと評価を実行する
+
+`05_benchmark.ipynb`でCase，Benchmark ID，実行するTrackerを指定する．Datasetとカメラ配置を`None`にすると，保存済みの全組合せを一括実行する．Trackerには`observations.parquet`だけを渡し，真の個体ID・群れID・リーダー情報は渡さない．推定完了後，Evaluatorが別処理でGround Truthと比較する．
+
+標準Trackerは`last_observation`と`constant_velocity`である．研究用Trackerは[`tracking/README.md`](tracking/README.md)に従って`workspace/tracking/`へ追加する．結果は`cases/<case_id>/runs/<run_id>/`へ保存され，群れ中心位置誤差，非観測時間，5 m・10 m・20 m以内の予測成功率を比較できる．条件別集計は`cases/<case_id>/benchmarks/<benchmark_id>/`へ保存する．評価式と妥当性は[`field-benchmark/README.md`](../packages/field-benchmark/README.md)に記録している．
+
+Rerunを導入した環境では`field_visualizer.log_tracking_replay()`からCase，真値，Observation，Trackを同じ2D時間軸へ記録できる．Rerunは可視化だけを担当し，シミュレーションやTrackerの計算には使用しない．

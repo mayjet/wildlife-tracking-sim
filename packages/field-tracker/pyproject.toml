@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "field-tracker"
+version = "0.1.0"
+description = "Observation-only reusable tracking runtime for field deployments and simulation"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24,<3",
+    "pandas>=2,<3",
+    "pyarrow>=14,<23",
+    "pydantic>=2.5,<3",
+    "scipy>=1.10,<2",
+    "shapely>=2,<3",
+    "field-environment>=0.1,<0.2",
+    "shepherd-contracts>=0.1,<0.2",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+

@@ -4,7 +4,7 @@
 
 本システムは，3次元農場環境で鹿の追跡手法とカメラ配置手法を再現可能に比較するシミュレーション・ベンチマーク基盤である．主対象はJetson Orin Nano（JetPack 6系，ARM64）であり，x86_64 NVIDIA GPU搭載Linuxも対象とする．
 
-開発はPhase 0〜12で進める．Phase 0〜7では，開発環境，共通Contracts，共通Case，固定Camera・terrain mesh・USD，最小Ground Truth Simulator，距離・FOV・3D遮蔽に基づくPerfect Observationまでを完成させた．Phase 8以降のWeb表示，Tracker，Benchmark，群れ行動，配置最適化には進まない．
+開発はPhase 0〜12で進める．Phase 0〜7の環境・観測基盤に加え，確定ルート型の群れ真値，Observation専用Tracker Runner，初期Benchmark，Rerun 2D記録APIを実装する．探索・採食行動，配置最適化，Noisy Observationは対象外とする．
 
 ## 機能要件
 
@@ -39,6 +39,9 @@
 - 標準配置はPythonで`("grid", 間隔m)`または`("uniform", 観測点数)`と宣言する．事前確定ルートは地図GUIで複数のWaypoint Setを作り，各Setへ`smooth`と`meandering`を適用する．配置・ルート・seedの全組合せを再現可能にし，YAMLはコメント付きの実験記録として自動生成する．Waypointは地形取得範囲全体へ指定でき，禁止地点は設定範囲内の移動可能セルへ補正し，Waypoint間の建物・禁止セルは自動迂回する．確定配置と確定ルートは既存IDを上書きしない．
 - 可視範囲の40 m gridは高速previewとし，正式な配置評価は1 m gridで足元・胴・頭を判定する．正式評価は分割実行，途中保存，再開，Case・配置単位の再利用を可能にする．
 - 2D可視範囲は地表，0.75 m，1.5 mの高さを3D判定して地面上へ投影する．地形cellや可視範囲gridは鹿の連続2D移動を制限しない．
+- 群れは確定ルート上のリーダーを基準に成獣・幼獣を配置し，seed付き個体差，最低間隔，建物・禁止セル回避を適用する．真の群れIDとリーダー属性はGround Truthだけへ保存する．
+- TrackerはObservationだけを入力とし，重複観測統合，定速度予測，一対一対応，曖昧状態，見失い，再観測，終了，推定群れを管理する．
+- Runは公開Track，内部状態，ライフサイクル，対応履歴を保存し，Evaluatorが別処理でGround Truthと比較する．
 
 ## Ground Truth分離
 
@@ -56,6 +59,6 @@ Caseの入力，派生地形，USD，Dataset，Runはすべて`cases/<case_id>/`
 - 重要な計算式，座標変換，評価処理にはテストを用意する．
 - 既存Schemaと公開APIの後方互換性を維持する．互換性を破る変更はDecision Recordと移行方針を必要とする．
 
-## Phase 6完了時点の非対象
+## 現時点の非対象
 
-PLATEAUの自動取得，衛星画像からの独自建物画像認識，鹿の群れ・意思決定，Camera観測・遮蔽・ray tracing，Tracker，評価計算，Rerun，配置探索，Noisy Observationは未実装とする．Genesis描画adapterは実装済みだが，`genesis-world`と`usd-core`を共通必須依存にはせず，利用可能な環境だけで実行する．
+PLATEAUの自動取得，衛星画像からの独自建物画像認識，鹿の探索・採食意思決定，複数仮説Tracker，配置探索は未実装とする．観測位置誤差は将来の頑健性確認用フックだけを提供し，標準実験では無効にする．GenesisとRerunはoptional依存とし，共通計算をViewer availabilityへ依存させない．

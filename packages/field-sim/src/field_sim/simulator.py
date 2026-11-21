@@ -8,7 +8,8 @@ from shepherd_contracts import GroundTruthFrame, GroundTruthState, Position3D, V
 from field_environment import EnvironmentCase, FeatureLayerStatus, TraversabilityValue
 
 from .config import LinearMotion, SimulationConfig, StationaryMotion, WaypointMotion
-from .terrain import surface_elevation_at
+from .herd_config import HerdSimulationConfig
+from .terrain import project_to_terrain_surface
 
 
 class TrajectoryValidationError(ValueError):
@@ -17,8 +18,12 @@ class TrajectoryValidationError(ValueError):
 
 @dataclass(frozen=True)
 class SimulationResult:
-    config: SimulationConfig
+    config: SimulationConfig | HerdSimulationConfig
     frames: tuple[GroundTruthFrame, ...]
+
+    @property
+    def duration_s(self) -> float:
+        return self.frames[-1].timestamp_s if self.frames else 0.0
 
 
 def _motion_state(config: SimulationConfig, timestamp_s: float):
@@ -53,11 +58,11 @@ def _motion_state(config: SimulationConfig, timestamp_s: float):
 
 def _validate_position(environment_case: EnvironmentCase, x_m: float, y_m: float) -> float:
     try:
-        z_m = surface_elevation_at(environment_case.heightmap, x_m, y_m)
-    except IndexError as error:
+        surface_position = project_to_terrain_surface(
+            environment_case.heightmap, x_m, y_m
+        )
+    except (IndexError, ValueError) as error:
         raise TrajectoryValidationError(str(error)) from error
-    if not np.isfinite(z_m):
-        raise TrajectoryValidationError("trajectory enters a missing-elevation cell")
     buildings = environment_case.buildings
     if (
         buildings is not None
@@ -73,7 +78,7 @@ def _validate_position(environment_case: EnvironmentCase, x_m: float, y_m: float
             raise TrajectoryValidationError(str(error)) from error
         if traversability.values[y_index, x_index] == TraversabilityValue.PROHIBITED:
             raise TrajectoryValidationError("trajectory enters a prohibited traversability cell")
-    return z_m
+    return surface_position.z_m
 
 
 def simulate(environment_case: EnvironmentCase, config: SimulationConfig) -> SimulationResult:

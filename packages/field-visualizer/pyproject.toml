@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "field-visualizer"
+version = "0.1.0"
+description = "Optional Rerun 2D visualization for wildlife tracking datasets and runs"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24,<3",
+    "pandas>=2,<3",
+    "field-environment>=0.1,<0.2",
+    "shepherd-contracts>=0.1,<0.2",
+]
+
+[project.optional-dependencies]
+rerun = ["rerun-sdk>=0.33,<0.34"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

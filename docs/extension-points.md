@@ -4,6 +4,8 @@
 
 研究用Trackerは`workspace/tracking/`に置き，`field-tracker`の共通APIを実装または構成して実行する．Kalman Filter，Stone Soup，世界モデルなどは観測契約だけを入力とし，Simulator内部や評価用Ground Truthへアクセスしない．非観測stepでも予測処理を呼び出せる必要がある．
 
+標準実装は`last_observation`と`constant_velocity`である．研究用方式は`workspace/tracking/<method>.py`へ引数なしの`create_tracker()`を定義し，`05_benchmark.ipynb`の`tracker_methods`へ方式名を追加する．
+
 ## カメラ配置
 
 配置手法は`workspace/placement/`に置き，`field-campost`の共通APIを使う．Caseの公開環境情報，候補領域，カメラ制約を入力し，`PlacementProposal`を返す．配置評価ロジックは`field-benchmark`に残し，手法側へ複製しない．
@@ -34,7 +36,7 @@ Phase 3の`load_usd_scene()`は描画・読込確認用の薄いoptional adapter
 
 `00_environment.ipynb`は人工地形・JAXA AW3D30・国土地理院tile・GeoTIFFの共通入口である．利用者が変更する値は先頭の`CONFIG_FILE`だけとし，取得方式と`create/load/edit`はYAMLで指定する．新しいterrain sourceは`TerrainSourceResult`へ変換するadapterとして`field-environment`へ追加し，NotebookにHTTP・座標変換・保存ロジックを置かない．
 
-`04_simulation.ipynb`はPhase 6〜7の薄い入口であり，Pythonによる実験宣言，Waypoint編集，コメント付きYAML生成，標準観測点配置，確定ルート，Ground Truth，2D可視範囲，Perfect Observation Datasetの確認を行う．新しい単純motionは`MotionConfig` discriminatorへ追加できるが，群れ・行動判断はPhase 10の`DeerBehaviorModel`で拡張し，Phase 6 motionへ混在させない．
+`04_simulation.ipynb`はPythonによる実験宣言，Waypoint編集，コメント付きYAML生成，標準観測点配置，確定ルート，群れProfile，Ground Truth，2D可視範囲，Perfect Observation Datasetの確認を行う．`05_benchmark.ipynb`は保存済みObservationからTrackerを実行し，Run保存後にEvaluatorを呼ぶ．新しい探索・採食は確定ルート群れへ混在させず，別の`DeerBehaviorModel`として追加する．
 
 地物adapterを追加する場合は，`unavailable`（未取得），`empty`（確認済み0件），`available`を保持し，取得失敗を空集合へ変換しない．GeoJSONはCase local座標または明示したEPSG:4326から変換する．
 

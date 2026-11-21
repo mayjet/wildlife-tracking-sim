@@ -24,8 +24,16 @@ from shepherd_contracts import (
 from field_environment import load_case, resolve_case_path, validate_case_id
 
 from .config import SimulationConfig
+from .herd_config import HerdSimulationConfig
+from .herd_simulator import simulate_herd
+from .routes import ResolvedRoute
 from .simulator import SimulationResult, simulate
-from .observations import ObservationResult, VisibilityConfig, generate_observations
+from .observations import (
+    ObservationPositionErrorConfig,
+    ObservationResult,
+    VisibilityConfig,
+    generate_observations,
+)
 
 
 @dataclass(frozen=True)
@@ -106,6 +114,48 @@ def _observations_to_dataframe(frames: tuple[ObservationFrame, ...]) -> pd.DataF
     )
 
 
+def _scenario_config(result: SimulationResult, *, observation_status: str) -> dict:
+    config = result.config
+    common = {
+        "individual_count": len(result.frames[0].states) if result.frames else 0,
+        "surface_interpolation": "piecewise triangular, matching TerrainMesh faces",
+        "surface_following": {
+            "enabled": True,
+            "method": "heightmap_piecewise_triangular",
+            "ground_truth_clearance_m": 0.0,
+            "simulator_actor_foot_clearance_m": 0.03,
+            "simulator_surface_tolerance_m": 0.05,
+        },
+        "observation_data_status": observation_status,
+    }
+    if isinstance(config, HerdSimulationConfig):
+        common.update(
+            {
+                "herd_count": 1,
+                "herd_id": config.herd_id,
+                "herd_profile_id": config.profile.profile_id,
+                "adult_count": config.profile.adult_count,
+                "juvenile_count": config.profile.juvenile_count,
+                "route_id": config.route_id,
+                "speed_mps": config.speed_mps,
+                "avoidance": {
+                    "local_angles_deg": list(config.local_avoidance_angles_deg),
+                    "local_radius_m": config.local_avoidance_radius_m,
+                    "astar_lookahead_m": config.astar_lookahead_m,
+                },
+            }
+        )
+    else:
+        common.update(
+            {
+                "truth_id": config.truth_id,
+                "motion": config.motion.model_dump(mode="json"),
+                "age_class": config.age_class.value,
+            }
+        )
+    return common
+
+
 def save_simulation_dataset(
     cases_root: str | Path,
     result: SimulationResult,
@@ -124,16 +174,11 @@ def save_simulation_dataset(
         case_id=result.config.case_id,
         dataset_id=dataset_id,
         seed=result.config.seed,
-        duration_s=result.config.duration_s,
+        duration_s=result.duration_s,
         simulation_step_s=result.config.step_s,
         scenario_config={
             "case_sha256": _case_hash(case_directory),
-            "individual_count": 1,
-            "truth_id": result.config.truth_id,
-            "motion": result.config.motion.model_dump(mode="json"),
-            "age_class": result.config.age_class.value,
-            "surface_interpolation": "piecewise triangular, matching TerrainMesh faces",
-            "observation_data_status": "not_generated_phase6",
+            **_scenario_config(result, observation_status="not_generated_phase6"),
         },
         observation_data_ref=observation_ref,
         ground_truth_data_ref=ground_truth_ref,
@@ -248,18 +293,16 @@ def save_observation_dataset(
         case_id=simulation_result.config.case_id,
         dataset_id=dataset_id,
         seed=simulation_result.config.seed,
-        duration_s=simulation_result.config.duration_s,
+        duration_s=simulation_result.duration_s,
         simulation_step_s=simulation_result.config.step_s,
         scenario_config={
             "case_sha256": _case_hash(case_directory),
-            "individual_count": sum(len(frame.states) for frame in simulation_result.frames[:1]),
-            "truth_id": simulation_result.config.truth_id,
-            "motion": simulation_result.config.motion.model_dump(mode="json"),
-            "age_class": simulation_result.config.age_class.value,
-            "surface_interpolation": "piecewise triangular, matching TerrainMesh faces",
-            "observation_data_status": "generated_phase7",
+            **_scenario_config(simulation_result, observation_status="generated_phase7"),
             "observation_point_layout_id": observation_result.layout.layout_id,
             "visibility": observation_result.config.model_dump(mode="json"),
+            "observation_position_error": observation_result.position_error_config.model_dump(
+                mode="json"
+            ),
         },
         observation_data_ref=observation_ref,
         ground_truth_data_ref=ground_truth_ref,
@@ -281,6 +324,10 @@ def save_observation_dataset(
         )
         (temporary / "visibility_config.json").write_text(
             observation_result.config.model_dump_json(indent=2), encoding="utf-8"
+        )
+        (temporary / "observation_position_error_config.json").write_text(
+            observation_result.position_error_config.model_dump_json(indent=2),
+            encoding="utf-8",
         )
         (temporary / "observation_point_layout.json").write_text(
             observation_result.layout.model_dump_json(indent=2), encoding="utf-8"
@@ -304,6 +351,7 @@ def run_and_save_observation_dataset(
     config: SimulationConfig,
     layout: ObservationPointLayout,
     visibility_config: VisibilityConfig | None = None,
+    position_error_config: ObservationPositionErrorConfig | None = None,
     *,
     overwrite: bool = False,
 ) -> SavedDataset:
@@ -314,6 +362,7 @@ def run_and_save_observation_dataset(
         layout,
         simulation_result.frames,
         visibility_config,
+        position_error_config,
     )
     return save_observation_dataset(
         cases_root,
@@ -329,6 +378,7 @@ def save_observations_for_layout(
     dataset_id: str,
     layout: ObservationPointLayout,
     visibility_config: VisibilityConfig | None = None,
+    position_error_config: ObservationPositionErrorConfig | None = None,
     *,
     overwrite: bool = False,
 ) -> Path:
@@ -336,11 +386,13 @@ def save_observations_for_layout(
     environment_case = load_case(cases_root, case_id)
     saved = load_simulation_dataset(cases_root, case_id, dataset_id)
     resolved_config = visibility_config or VisibilityConfig()
+    resolved_error_config = position_error_config or ObservationPositionErrorConfig()
     observation_result = generate_observations(
         environment_case,
         layout,
         saved.frames,
         resolved_config,
+        resolved_error_config,
     )
     observation_directory = saved.directory / "observations" / layout.layout_id
     if observation_directory.exists() and not overwrite:
@@ -353,6 +405,9 @@ def save_observations_for_layout(
         )
         (temporary / "visibility_config.json").write_text(
             resolved_config.model_dump_json(indent=2), encoding="utf-8"
+        )
+        (temporary / "observation_position_error_config.json").write_text(
+            resolved_error_config.model_dump_json(indent=2), encoding="utf-8"
         )
         (temporary / "observation_point_layout.json").write_text(
             layout.model_dump_json(indent=2), encoding="utf-8"
@@ -368,6 +423,7 @@ def save_observations_for_layout(
                 len(frame.observations) for frame in observation_result.frames
             ),
             "truth_fields_excluded": True,
+            "observation_position_error": resolved_error_config.model_dump(mode="json"),
         }
         (temporary / "manifest.json").write_text(
             json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -391,5 +447,20 @@ def run_and_save_simulation(
     return save_simulation_dataset(
         cases_root,
         simulate(environment_case, config),
+        overwrite=overwrite,
+    )
+
+
+def run_and_save_herd_simulation(
+    cases_root: str | Path,
+    route: ResolvedRoute,
+    config: HerdSimulationConfig,
+    *,
+    overwrite: bool = False,
+) -> SavedDataset:
+    environment_case = load_case(cases_root, config.case_id)
+    return save_simulation_dataset(
+        cases_root,
+        simulate_herd(environment_case, route, config),
         overwrite=overwrite,
     )

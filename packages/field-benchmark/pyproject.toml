@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "field-benchmark"
+version = "0.1.0"
+description = "Ground-truth-isolated evaluation for wildlife tracking runs"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24,<3",
+    "pandas>=2,<3",
+    "pyarrow>=14,<23",
+    "scipy>=1.10,<2",
+    "field-environment>=0.1,<0.2",
+    "field-tracker>=0.1,<0.2",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

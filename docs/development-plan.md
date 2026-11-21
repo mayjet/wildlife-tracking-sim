@@ -14,10 +14,10 @@
 | 5 | 実地形Case完成 | 地形メッシュ・森林・建物・牧場境界・USD | 完了 |
 | 6 | シミュレーション基盤 | 鹿の2D真位置・時刻・単純な移動軌跡 | 完了 |
 | 7 | カメラ観測 | FOV・距離・3D遮蔽・Perfect Observation | 完了 |
-| 8 | Web 2D可視化 | Rerunで地形・カメラ・真位置・観測位置を表示 | 未着手 |
-| 9 | Tracker API | workspaceから追跡・予測手法を実行 | 未着手 |
-| 10 | 鹿の群れ行動 | リーダー・子供・探索・採食・追従 | 未着手 |
-| 11 | Benchmark | Dataset保存・再利用・追跡評価・手法比較 | 未着手 |
+| 8 | Web 2D可視化 | Rerunで地形・真位置・観測位置・Trackを表示 | 基本実装完了，Jetson Viewer検証待ち |
+| 9 | Tracker API | workspaceから追跡・予測手法を実行 | 基本実装完了 |
+| 10 | 鹿の群れ行動 | リーダー・子供・確定ルート追従・障害物回避 | 基本実装完了，探索・採食は未実装 |
+| 11 | Benchmark | Dataset保存・再利用・追跡評価・手法比較 | 基本実装完了 |
 | 12 | 配置探索基盤 | 全探索・最適化・強化学習向け反復評価 | 未着手 |
 
 ## Phase 0：開発環境
@@ -89,7 +89,7 @@
 - **目的**：Rerun Webで地形，カメラ，真位置，観測位置を検証可能にする．
 - **編集対象**：`packages/field-visualizer/`と結果確認Notebook．
 - **依存関係**：Phase 2 Heightmap，Phase 3 Camera，Phase 6〜7 frame．
-- **完了条件**：Trackerなしで真値と観測の時間変化を2D表示できる．
+- **完了条件**：真値，観測，Trackの時間変化をRerun 2Dへ記録できる．Rerunはoptional依存とし，JetsonでViewer起動を別途検証する．
 - **引き渡し**：公開eventから描画する非侵襲visualizer API．
 
 ## Phase 9：Tracker API
@@ -97,15 +97,15 @@
 - **目的**：`workspace/tracking/`の追跡・予測手法を共通Protocolから実行する．
 - **編集対象**：`packages/field-tracker/`，`workspace/tracking/`，追跡Notebook．
 - **依存関係**：Phase 1 Tracker Protocol，Phase 7 ObservationFrame．
-- **完了条件**：空観測stepを含めTrack/GroupTrackを継続生成できる．
+- **完了条件**：空観測stepを含め，重複観測統合，対応付け，`TENTATIVE/TRACKED/LOST/AMBIGUOUS/RETIRED`，Track/GroupTrackを継続生成しRunへ保存できる．
 - **引き渡し**：交換可能Tracker runnerとTrackingFrame．
 
 ## Phase 10：鹿の群れ行動
 
-- **目的**：リーダー，成獣・幼獣，探索，採食，追従を交換可能な行動モデルとして実装する．
+- **目的**：まず確定ルート上でリーダー，成獣・幼獣，追従，個体間隔，障害物回避を再現し，探索・採食を後から交換可能にする．
 - **編集対象**：`field-sim`行動境界，`workspace/behavior/`．
 - **依存関係**：Phase 5環境，Phase 6 Simulator，Phase 1 Behavior Protocol．
-- **完了条件**：seed再現性，局所環境制限，障害物条件，群れ状態を検証する．
+- **完了条件**：seed再現性，複数個体の属性，建物・禁止セル回避，群れ真値保存を検証する．探索・採食は後続研究用拡張として残す．
 - **引き渡し**：複数Scenarioで利用可能な行動model群．
 
 ## Phase 11：Benchmark
@@ -113,7 +113,7 @@
 - **目的**：Datasetを保存・再利用し，追跡・配置結果を公平に比較する．
 - **編集対象**：`packages/field-benchmark/`，benchmark/results Notebook．
 - **依存関係**：Phase 6〜10の真値・観測・推定，Phase 1 Manifest．
-- **完了条件**：Ground Truth隔離，Dataset round trip，確定済み評価式，再現可能Runを検証する．
+- **完了条件**：Ground Truth隔離，Run保存，群れ中心位置誤差，非観測時間，予測成功率，2D可視率との関係を再現可能に評価する．個体指標は失敗分析用として維持する．
 - **引き渡し**：Dataset/Run成果物と評価API．
 
 ## Phase 12：配置探索基盤

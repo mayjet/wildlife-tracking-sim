@@ -19,6 +19,7 @@ from field_sim import (
     TimedWaypoint,
     TrajectoryValidationError,
     WaypointMotion,
+    project_to_terrain_surface,
     simulate,
     surface_elevation_at,
 )
@@ -68,6 +69,25 @@ def test_surface_height_matches_mesh_triangle_interpolation(simulation_case) -> 
     elevation = surface_elevation_at(heightmap, x_m, y_m)
     assert np.isfinite(elevation)
     assert min(heightmap.values.ravel()) <= elevation <= max(heightmap.values.ravel())
+
+
+def test_surface_projection_preserves_xy_and_uses_mesh_surface(simulation_case) -> None:
+    x_m = -12.5
+    y_m = 7.5
+    projected = project_to_terrain_surface(
+        simulation_case.heightmap, x_m, y_m, clearance_m=0.03
+    )
+
+    assert projected.x_m == x_m
+    assert projected.y_m == y_m
+    assert projected.z_m == pytest.approx(
+        simulation_case.heightmap.surface_elevation_at(x_m, y_m) + 0.03
+    )
+
+    with pytest.raises(ValueError, match="non-negative"):
+        project_to_terrain_surface(
+            simulation_case.heightmap, x_m, y_m, clearance_m=-0.01
+        )
 
 
 def test_out_of_mesh_and_prohibited_cells_are_rejected(simulation_case) -> None:

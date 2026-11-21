@@ -11,11 +11,12 @@ from shapely.geometry import shape
 from field_campost import (
     ENVIRONMENT_USD_FILENAME,
     GenesisMeshSource,
-    GenesisRouteOverlay,
     GenesisValidationRay,
     GenesisVisibilityOverlay,
     GenesisViewerOptions,
     build_genesis_mesh_scene,
+    create_genesis_deer_proxy,
+    drape_genesis_route_overlay,
     draw_genesis_experiment_overlays,
     inspect_genesis,
     load_observation_point_layout,
@@ -301,17 +302,15 @@ def _load_routes(cases_root: Path, case_id: str, case_directory: Path, arguments
     return tuple(load_resolved_route(cases_root, case_id, route_id) for route_id in requested)
 
 
-def _route_overlay(environment_case: EnvironmentCase, route, color) -> GenesisRouteOverlay:
-    positions = route.points[["x_m", "y_m", "z_m"]].to_numpy(dtype=np.float64).copy()
-    positions[:, 2] += 0.8
-    waypoints = []
-    for waypoint in route.waypoint_set.waypoints:
-        z_m = environment_case.heightmap.surface_elevation_at(waypoint.x_m, waypoint.y_m)
-        waypoints.append((waypoint.x_m, waypoint.y_m, z_m + 0.8))
-    return GenesisRouteOverlay(
+def _route_overlay(environment_case: EnvironmentCase, route, color):
+    return drape_genesis_route_overlay(
+        environment_case,
         route_id=route.definition.route_id,
-        positions=positions,
-        waypoints=np.asarray(waypoints, dtype=np.float64),
+        coordinates=route.points[["x_m", "y_m"]].to_numpy(dtype=np.float64),
+        waypoints=np.asarray(
+            [(point.x_m, point.y_m) for point in route.waypoint_set.waypoints],
+            dtype=np.float64,
+        ),
         color=color,
     )
 
@@ -439,6 +438,17 @@ def main() -> int:
     )
     for route in routes:
         print(f"Route: {route.definition.route_id}, {route.length_m:.1f} m")
+    deer_proxies = tuple(
+        create_genesis_deer_proxy(
+            environment_case,
+            truth_id=f"route-preview-{route.definition.route_id}",
+            x_m=float(route.points.iloc[0].x_m),
+            y_m=float(route.points.iloc[0].y_m),
+            heading_rad=float(route.points.iloc[0].heading_rad),
+        )
+        for route in routes
+        if len(route.points)
+    )
 
     report = None
     validation_rays = ()
@@ -499,6 +509,7 @@ def main() -> int:
             ),
             routes=route_overlays,
             rays=validation_rays if arguments.mode in {"validation", "all"} else (),
+            deer_proxies=deer_proxies,
         )
     print(f"Genesis loaded {len(genesis_scene.entities)} scene entities.")
     run_genesis_viewer(genesis_scene)

@@ -15,12 +15,15 @@ from field_environment import load_case, resolve_case_path
 from .dataset import (
     load_simulation_dataset,
     run_and_save_simulation,
+    save_simulation_dataset,
     save_observations_for_layout,
 )
 from .experiment import LoadedExperimentPlan, save_experiment_snapshot
 from .observations import VisibilityConfig
 from .route_generators import generate_resolved_route, load_route_inputs
 from .routes import route_to_simulation_config, save_resolved_route
+from .herd_config import HerdSimulationConfig
+from .herd_simulator import simulate_herd
 
 
 @dataclass(frozen=True)
@@ -98,16 +101,39 @@ def run_experiment_plan(
                 route_cache[route_key] = route
             route = route_cache[route_key]
 
-            dataset_id = f"{route.definition.route_id}-seed{combination.seed}"
-            config = route_to_simulation_config(
-                route,
-                dataset_id=dataset_id,
-                speed_mps=loaded.plan.simulation.speed_mps,
-                step_s=loaded.plan.simulation.step_s,
-                truth_id=loaded.plan.simulation.truth_id,
-                age_class=loaded.plan.simulation.age_class,
-                seed=combination.seed,
+            profile = next(
+                (
+                    item
+                    for item in loaded.plan.herd_profiles
+                    if item.profile_id == combination.herd_profile_id
+                ),
+                None,
             )
+            dataset_id = (
+                f"{route.definition.route_id}-"
+                f"{profile.profile_id + '-' if profile is not None else ''}"
+                f"seed{combination.seed}"
+            )
+            if profile is None:
+                config = route_to_simulation_config(
+                    route,
+                    dataset_id=dataset_id,
+                    speed_mps=loaded.plan.simulation.speed_mps,
+                    step_s=loaded.plan.simulation.step_s,
+                    truth_id=loaded.plan.simulation.truth_id,
+                    age_class=loaded.plan.simulation.age_class,
+                    seed=combination.seed,
+                )
+            else:
+                config = HerdSimulationConfig(
+                    case_id=loaded.plan.case_id,
+                    dataset_id=dataset_id,
+                    route_id=route.definition.route_id,
+                    seed=combination.seed,
+                    speed_mps=loaded.plan.simulation.speed_mps,
+                    step_s=loaded.plan.simulation.step_s,
+                    profile=profile,
+                )
             dataset_directory = (
                 resolve_case_path(cases_root, loaded.plan.case_id)
                 / "datasets"
@@ -116,7 +142,14 @@ def run_experiment_plan(
             if dataset_directory.exists() and not overwrite:
                 load_simulation_dataset(cases_root, loaded.plan.case_id, dataset_id)
             else:
-                run_and_save_simulation(cases_root, config, overwrite=overwrite)
+                if profile is None:
+                    run_and_save_simulation(cases_root, config, overwrite=overwrite)
+                else:
+                    save_simulation_dataset(
+                        cases_root,
+                        simulate_herd(environment_case, route, config),
+                        overwrite=overwrite,
+                    )
             observation_directory = (
                 dataset_directory / "observations" / layout.layout_id
             )
@@ -127,6 +160,7 @@ def run_experiment_plan(
                     dataset_id,
                     layout,
                     visibility,
+                    loaded.plan.visibility.observation_position_error,
                     overwrite=overwrite,
                 )
             statuses[combination.combination_id] = "completed"

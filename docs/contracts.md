@@ -87,6 +87,8 @@ case = CaseSpec(
 
 `GroundTruthState`は時刻，Simulator専用個体ID，任意の真の群れID・リーダー属性，2Dまたは3D位置，任意速度，年齢区分を持つ．`GroundTruthFrame`は同時刻の真値集合であり，frame内の真値IDを一意にする．
 
+Simulatorが3D位置を保存する場合，`position.z_m`はCaseのTerrain Mesh上の地表高とする．3Dモデルの足元浮上量，モデル原点補正，Viewer用経路線の高さはGround Truthへ含めず，各Simulator adapterの表示設定として扱う．地表投影は建物・禁止領域回避後のXYを変更してはならない．
+
 ```python
 truth = GroundTruthState(
     timestamp_s=1.0,
@@ -116,7 +118,7 @@ empty_frame = ObservationFrame(timestamp_s=2.0)
 
 ## 追跡出力
 
-`TrackEstimate`はTracker自身のtrack ID，時刻，推定2D位置，任意速度，`OBSERVED`，`PREDICTED`，`EXIT_CANDIDATE`，`TERMINATED`の状態，任意の位置分布を持つ．`GroupTrackEstimate`は独立型で，群れ中心，推定・観測構成員数，所属track ID，任意の中心分布を持つ．群れ中心を観測個体位置から自動生成する処理はない．`TrackingFrame`は両者を別collectionに保持する．
+`TrackEstimate`はTracker自身のtrack ID，時刻，推定2D位置，任意速度，`OBSERVED`，`PREDICTED`，`EXIT_CANDIDATE`，`TERMINATED`の状態，任意の位置分布を持つ．`GroupTrackEstimate`は独立型で，群れ中心，推定・観測構成員数，所属track ID，任意の中心分布を持つ．標準Trackerは個体Track間の距離・速度差・継続時間から群れを推定し，加入距離と離脱距離を分けて群れIDを維持する．`TrackingFrame`は個体と群れを別collectionに保持する．
 
 ```python
 track = TrackEstimate(
@@ -220,6 +222,8 @@ class MyBehavior:
 ```
 
 Trackerの`step()`は観測数0でも毎simulation step呼び出す．配置法は`PlacementEnvironment`と`PlacementConstraints`のみを見る．行動モデルは現在の`GroundTruthState`と半径を明示した`LocalEnvironmentView`を受け取り，未来軌跡や無制限な全域餌分布を契約に含めない．
+
+`field-tracker`は公開Contractsを変更せず，内部で`TENTATIVE`，`TRACKED`，`LOST`，`AMBIGUOUS`，`RETIRED`を管理する．公開時は`OBSERVED`，`PREDICTED`，`EXIT_CANDIDATE`，`TERMINATED`へ変換する．内部状態，対応候補，信頼度はRunの診断列であり，Tracker交換契約には含めない．
 
 ## Versioning
 

@@ -25,15 +25,19 @@ from .genesis import (
 )
 from .genesis_assets import GenesisMeshAssets, write_genesis_mesh_assets
 from .genesis_experiment import (
+    GenesisDeerProxy,
     GenesisInfrastructureAssets,
     GenesisRouteOverlay,
     GenesisSceneLayers,
     GenesisValidationRay,
     GenesisVisibilityOverlay,
+    create_genesis_deer_proxy,
+    drape_genesis_route_overlay,
     draw_genesis_experiment_overlays,
     write_experiment_scene_layers,
     write_observation_infrastructure_assets,
 )
+from .genesis_runtime import GenesisDeerFrame, build_genesis_deer_frame
 from .mesh import TerrainMesh, heightmap_to_mesh, validate_mesh_against_heightmap
 from .observation_points import (
     CameraMountProfile,
@@ -73,6 +77,8 @@ __all__ = [
     "FixedCameraPlacement",
     "CameraMountProfile",
     "CameraMountDefinition",
+    "GenesisDeerFrame",
+    "GenesisDeerProxy",
     "GenesisMeshAssets",
     "GenesisInfrastructureAssets",
     "GenesisMeshSource",
@@ -92,11 +98,14 @@ __all__ = [
     "camera_look_at",
     "build_genesis_mesh_scene",
     "build_genesis_scene",
+    "build_genesis_deer_frame",
     "build_field_summary",
     "create_fixed_camera_layout",
+    "create_genesis_deer_proxy",
     "create_default_observation_point_layouts",
     "create_observation_point_layout",
     "draw_genesis_experiment_overlays",
+    "drape_genesis_route_overlay",
     "available_placement_methods",
     "generate_grid_observation_points",
     "generate_uniform_observation_points",

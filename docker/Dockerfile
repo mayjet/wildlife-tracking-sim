@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    PYTHONPATH=/workspace/libs/shepherd-contracts/src:/workspace/packages/field-environment/src:/workspace/packages/field-campost/src:/workspace/packages/field-sim/src
+    PYTHONPATH=/workspace/libs/shepherd-contracts/src:/workspace/packages/field-environment/src:/workspace/packages/field-campost/src:/workspace/packages/field-sim/src:/workspace/packages/field-tracker/src:/workspace/packages/field-benchmark/src:/workspace/packages/field-visualizer/src
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -25,8 +25,11 @@ COPY libs/shepherd-contracts /tmp/shepherd-contracts
 COPY packages/field-environment /tmp/field-environment
 COPY packages/field-campost /tmp/field-campost
 COPY packages/field-sim /tmp/field-sim
-RUN python3 -m pip install /tmp/shepherd-contracts /tmp/field-environment /tmp/field-campost /tmp/field-sim \
-    && rm -rf /tmp/shepherd-contracts /tmp/field-environment /tmp/field-campost /tmp/field-sim
+COPY packages/field-tracker /tmp/field-tracker
+COPY packages/field-benchmark /tmp/field-benchmark
+COPY packages/field-visualizer /tmp/field-visualizer
+RUN python3 -m pip install /tmp/shepherd-contracts /tmp/field-environment /tmp/field-campost /tmp/field-sim /tmp/field-tracker /tmp/field-benchmark /tmp/field-visualizer \
+    && rm -rf /tmp/shepherd-contracts /tmp/field-environment /tmp/field-campost /tmp/field-sim /tmp/field-tracker /tmp/field-benchmark /tmp/field-visualizer
 
 WORKDIR /workspace
 CMD ["sleep", "infinity"]

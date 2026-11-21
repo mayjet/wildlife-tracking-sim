@@ -12,6 +12,7 @@ from field_campost import CameraMountDefinition, PlacementDefinition
 from field_environment import validate_case_id
 
 from .experiment import LoadedExperimentPlan, load_experiment_plan
+from .herd_config import HerdProfile
 from .routes import RouteDefinition
 from .waypoints import WaypointSet
 
@@ -225,6 +226,8 @@ def author_experiment(
     version: str = "v1",
     visibility: Mapping[str, object] | None = None,
     simulation: Mapping[str, object] | None = None,
+    herd_profiles: Sequence[HerdProfile | Mapping[str, object]] = (),
+    include_single_individual: bool = True,
     overwrite: bool = True,
 ) -> AuthoredExperiment:
     validate_case_id(experiment_id)
@@ -350,6 +353,16 @@ def author_experiment(
             plan_payload["visibility"] = dict(visibility)
         if simulation is not None:
             plan_payload["simulation"] = dict(simulation)
+        if herd_profiles:
+            plan_payload["herd_profiles"] = [
+                (
+                    item.model_dump(mode="json")
+                    if isinstance(item, HerdProfile)
+                    else HerdProfile.model_validate(item).model_dump(mode="json")
+                )
+                for item in herd_profiles
+            ]
+        plan_payload["include_single_individual"] = include_single_individual
         plan_path = temporary / "experiment.yaml"
         _write_commented_yaml(
             plan_path,
@@ -363,11 +376,19 @@ def author_experiment(
                 (0, "matrix"): "配置とルートの組合せ方法",
                 (0, "visibility"): "可視判定の条件",
                 (0, "simulation"): "鹿の速度と時間刻み",
+                (0, "herd_profiles"): "全て試す群れ構成",
+                (0, "include_single_individual"): "従来の単独個体も実験するか",
                 (2, "preview_cell_size_m"): "高速確認の評価間隔m",
                 (2, "intermediate_cell_size_m"): "中間確認の評価間隔m",
                 (2, "evaluation_cell_size_m"): "正式評価の間隔m",
                 (2, "deer_height_m"): "評価する鹿の高さm",
                 (2, "sample_heights_m"): "足元・胴・頭の評価高m",
+                (2, "observation_position_error"): "任意の観測位置誤差．標準は無効",
+                (4, "enabled"): "観測位置誤差を有効にするか",
+                (4, "model"): "uniform_diskまたはgaussian",
+                (4, "radius_m"): "円内一様誤差の最大半径m",
+                (4, "standard_deviation_m"): "正規分布誤差の標準偏差m",
+                (4, "seed"): "観測誤差を再現するseed",
                 (2, "speed_mps"): "鹿の移動速度m/s",
                 (2, "step_s"): "シミュレーション時間刻みs",
             },

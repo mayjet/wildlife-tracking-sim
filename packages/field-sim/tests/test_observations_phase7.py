@@ -19,6 +19,7 @@ from shepherd_contracts import (
 from field_environment import FeatureLayerStatus, Heightmap, PolygonFeatureLayer
 from field_sim import (
     AnalyticRaycastBackend,
+    ObservationPositionErrorConfig,
     OcclusionKind,
     VisibilityClass,
     VisibilityConfig,
@@ -109,6 +110,36 @@ def test_visible_deer_generates_truth_isolated_observation(simulation_case):
     assert observation.position.x_m == 10.0
     assert "truth" not in observation.model_dump()
     assert "secret" not in observation.model_dump_json()
+
+
+def test_optional_observation_position_error_is_seeded_and_disabled_by_default(
+    simulation_case,
+):
+    layout = _single_point_layout(simulation_case)
+    frame = GroundTruthFrame(timestamp_s=0.0, states=(_state(simulation_case, 10.0),))
+
+    exact = generate_observations(simulation_case, layout, (frame,))
+    error_config = ObservationPositionErrorConfig(
+        enabled=True,
+        model="uniform_disk",
+        radius_m=2.0,
+        seed=42,
+    )
+    first = generate_observations(
+        simulation_case, layout, (frame,), position_error_config=error_config
+    )
+    second = generate_observations(
+        simulation_case, layout, (frame,), position_error_config=error_config
+    )
+
+    exact_position = exact.frames[0].observations[0].position
+    first_position = first.frames[0].observations[0].position
+    second_position = second.frames[0].observations[0].position
+    assert exact_position.x_m == 10.0
+    assert exact_position.y_m == 0.0
+    assert first_position == second_position
+    error_m = np.hypot(first_position.x_m - 10.0, first_position.y_m)
+    assert 0.0 < error_m <= 2.0
 
 
 def test_observation_point_seam_is_deduplicated(simulation_case):

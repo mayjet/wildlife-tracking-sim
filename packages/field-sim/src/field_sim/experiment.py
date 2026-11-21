@@ -11,6 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from field_environment import resolve_repository_path, validate_case_id
 
+from .herd_config import HerdProfile
+from .observations import ObservationPositionErrorConfig
+
 
 class ExperimentVisibility(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
@@ -20,6 +23,9 @@ class ExperimentVisibility(BaseModel):
     evaluation_cell_size_m: float = Field(default=1.0, gt=0.0)
     deer_height_m: float = Field(default=1.5, gt=0.0)
     sample_heights_m: tuple[float, ...] = (0.0, 0.75, 1.5)
+    observation_position_error: ObservationPositionErrorConfig = (
+        ObservationPositionErrorConfig()
+    )
 
 
 class ExperimentSimulation(BaseModel):
@@ -54,6 +60,8 @@ class ExperimentPlan(BaseModel):
     matrix: ExperimentMatrix = ExperimentMatrix()
     visibility: ExperimentVisibility = ExperimentVisibility()
     simulation: ExperimentSimulation = ExperimentSimulation()
+    herd_profiles: tuple[HerdProfile, ...] = ()
+    include_single_individual: bool = True
 
     @model_validator(mode="after")
     def validate_ids(self) -> "ExperimentPlan":
@@ -70,6 +78,7 @@ class ExperimentCombination:
     layout_definition_path: Path
     route_definition_path: Path
     seed: int
+    herd_profile_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +95,7 @@ class LoadedExperimentPlan:
                     "placement_file": str(combination.layout_definition_path),
                     "route_file": str(combination.route_definition_path),
                     "seed": combination.seed,
+                    "herd_profile_id": combination.herd_profile_id,
                 }
                 for combination in self.combinations
             ]
@@ -108,11 +118,17 @@ def load_experiment_plan(
     if missing:
         raise FileNotFoundError(f"experiment references missing files: {missing}")
     combinations = []
-    for placement_path, route_path, seed in product(
-        placement_paths, route_paths, plan.seeds
+    profiles: tuple[HerdProfile | None, ...] = (
+        ((None,) if plan.include_single_individual else ()) + plan.herd_profiles
+    )
+    if not profiles:
+        raise ValueError("experiment requires a single individual or at least one herd profile")
+    for placement_path, route_path, seed, profile in product(
+        placement_paths, route_paths, plan.seeds, profiles
     ):
         combination_id = (
-            f"{placement_path.stem}__{route_path.stem}__seed{seed}"
+            f"{placement_path.stem}__{route_path.stem}__"
+            f"{profile.profile_id + '__' if profile is not None else ''}seed{seed}"
         )
         validate_case_id(combination_id)
         combinations.append(
@@ -121,6 +137,7 @@ def load_experiment_plan(
                 layout_definition_path=placement_path,
                 route_definition_path=route_path,
                 seed=seed,
+                herd_profile_id=None if profile is None else profile.profile_id,
             )
         )
     return LoadedExperimentPlan(plan=plan, path=resolved, combinations=tuple(combinations))

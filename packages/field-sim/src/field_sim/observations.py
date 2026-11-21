@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, IntEnum
 from math import atan2
 from pathlib import Path
@@ -31,6 +31,39 @@ class ObservationRule(str, Enum):
     FULL_BODY = "full_body"
     UPPER_BODY = "upper_body"
     ANY_PART = "any_part"
+
+
+class ObservationPositionErrorModel(str, Enum):
+    UNIFORM_DISK = "uniform_disk"
+    GAUSSIAN = "gaussian"
+
+
+class ObservationPositionErrorConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, allow_inf_nan=False)
+
+    enabled: bool = False
+    model: ObservationPositionErrorModel = ObservationPositionErrorModel.UNIFORM_DISK
+    radius_m: float = Field(default=0.0, ge=0.0)
+    standard_deviation_m: float = Field(default=0.0, ge=0.0)
+    seed: int = 0
+
+    @model_validator(mode="after")
+    def validate_scale(self) -> "ObservationPositionErrorConfig":
+        if not self.enabled:
+            return self
+        if (
+            self.model is ObservationPositionErrorModel.UNIFORM_DISK
+            and self.radius_m <= 0.0
+        ):
+            raise ValueError("radius_m must be positive for enabled uniform_disk error")
+        if (
+            self.model is ObservationPositionErrorModel.GAUSSIAN
+            and self.standard_deviation_m <= 0.0
+        ):
+            raise ValueError(
+                "standard_deviation_m must be positive for enabled gaussian error"
+            )
+        return self
 
 
 class VisibilityFailure(str, Enum):
@@ -114,6 +147,9 @@ class ObservationResult:
     frames: tuple[ObservationFrame, ...]
     layout: ObservationPointLayout
     config: VisibilityConfig
+    position_error_config: ObservationPositionErrorConfig = field(
+        default_factory=ObservationPositionErrorConfig
+    )
 
 
 @dataclass(frozen=True)
@@ -400,8 +436,11 @@ def generate_observations(
     layout: ObservationPointLayout,
     frames: tuple[GroundTruthFrame, ...],
     config: VisibilityConfig | None = None,
+    position_error_config: ObservationPositionErrorConfig | None = None,
 ) -> ObservationResult:
     resolved_config = config or VisibilityConfig()
+    resolved_error_config = position_error_config or ObservationPositionErrorConfig()
+    random = np.random.default_rng(resolved_error_config.seed)
     raycast = AnalyticRaycastBackend(
         environment_case, sample_step_m=resolved_config.ray_sample_step_m
     )
@@ -419,12 +458,29 @@ def generate_observations(
                 interval_steps = frame.timestamp_s / camera.observation_interval_s
                 if not np.isclose(interval_steps, round(interval_steps), rtol=0.0, atol=1e-9):
                     continue
+                observed_x_m = state.position.x_m
+                observed_y_m = state.position.y_m
+                if resolved_error_config.enabled:
+                    if (
+                        resolved_error_config.model
+                        is ObservationPositionErrorModel.UNIFORM_DISK
+                    ):
+                        radius_m = resolved_error_config.radius_m * np.sqrt(random.random())
+                        angle_rad = random.uniform(0.0, 2.0 * np.pi)
+                        observed_x_m += float(radius_m * np.cos(angle_rad))
+                        observed_y_m += float(radius_m * np.sin(angle_rad))
+                    else:
+                        offset = random.normal(
+                            0.0, resolved_error_config.standard_deviation_m, size=2
+                        )
+                        observed_x_m += float(offset[0])
+                        observed_y_m += float(offset[1])
                 observations.append(
                     Observation(
                         timestamp_s=frame.timestamp_s,
                         camera_id=selected.camera_id,
                         observation_id=f"obs-{frame_index:06d}-{len(observations):06d}",
-                        position=Position2D(x_m=state.position.x_m, y_m=state.position.y_m),
+                        position=Position2D(x_m=observed_x_m, y_m=observed_y_m),
                         age_class=(
                             state.age_class
                             if resolved_config.include_age_class
@@ -436,7 +492,10 @@ def generate_observations(
             ObservationFrame(timestamp_s=frame.timestamp_s, observations=tuple(observations))
         )
     return ObservationResult(
-        frames=tuple(output_frames), layout=layout, config=resolved_config
+        frames=tuple(output_frames),
+        layout=layout,
+        config=resolved_config,
+        position_error_config=resolved_error_config,
     )
 
 

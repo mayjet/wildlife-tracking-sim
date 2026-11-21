@@ -34,7 +34,7 @@ cases/<case_id>/           Case単位の入力・生成物・結果
 
 ## 実行時データフロー
 
-Phase 7の実験条件は`04_simulation.ipynb`のPython宣言を正本とする．authoring層がコメント付きYAMLを`workspace/experiments/generated/<experiment_id>/`へ生成し，既存の配置・ルート・batch APIへ渡す．`experiment.yaml`は配置宣言，ルート宣言，seedを参照し，直積の実験表を保存する生成物である．標準配置は`grid`と`uniform`である．事前確定ルートでは複数のWaypoint Setを地図GUIで保存し，各Setから標準の`smooth`と`meandering`を生成する．Waypointはルート入力方式の一つであり，将来の探索・行動モデルとは分離する．研究用拡張は`workspace/placement/`と`workspace/behavior/routes/`に置き，方式名と同名moduleを明示的に読み込む．
+Phase 7以降の実験条件は`04_simulation.ipynb`のPython宣言を正本とする．authoring層がコメント付きYAMLを`workspace/experiments/generated/<experiment_id>/`へ生成し，配置・ルート・群れProfile・seedの直積をbatch APIへ渡す．標準配置は`grid`と`uniform`である．事前確定ルートでは複数のWaypoint Setを地図GUIで保存し，各Setから標準の`smooth`と`meandering`を生成する．Waypointはルート入力方式の一つであり，将来の探索・行動モデルとは分離する．研究用拡張は`workspace/placement/`と`workspace/behavior/routes/`に置き，方式名と同名moduleを明示的に読み込む．
 
 Waypointは研究者が必ず通過させたい地点，Resolved Routeは約1 m間隔の確定経路，Trajectoryは速度と時刻を与えたGround Truthであり，別々の成果物として扱う．標準ルート生成はCaseのTraversabilityを参照し，禁止Waypointの近傍補正，区間ごとのA*迂回，曲線・蛇行幅の安全側調整を順に行う．元Waypointと補正後座標，迂回区間，最終パラメータはResolved Routeへ記録する．配置と確定ルートはIDで不変とし，変更時は親IDを記録できる新しいIDを作る．
 
@@ -55,6 +55,8 @@ Case -> Environment -> Simulation Backend -> Ground Truth
 ```
 
 Ground TruthからTrackerへの経路は存在しない．Evaluatorは観測・推定とGround Truthを別入力として受け取る．DatasetにはTracker入力用の観測と評価用の真値を論理的または物理的に分離して保存する．
+
+`field-tracker`のRunnerは`ObservationFrame`だけを引数に取り，複数Cameraの同位置観測を統合してから個体Trackへ対応付ける．内部状態はRun成果物へ保存するが，公開出力はContractsの`TrackingFrame`へ変換する．`field-benchmark`だけが保存済みGround TruthとTrackを対応付ける．`05_benchmark.ipynb`はこの二段階を順番に実行する．
 
 ## Backend境界
 
@@ -180,6 +182,10 @@ workspace/04_simulation.ipynb
 ```
 
 `SimulationConfig`はCase ID，Dataset ID，seed，duration，step，個体属性とmotionを保持する．`simulate()`はmeshの三角形分割と同じ面上線形補間でzを算出し，時刻0から終了時刻まで`GroundTruthFrame`を生成する．Ground Truthは`ground_truth.parquet`へ保存し，`DatasetManifest`にはCase hash，motion，地表補間法，Observation未生成状態を記録する．Phase 6は観測ファイルを生成せず，Trackerへの経路を持たない．
+
+移動処理は，XY経路決定，個体間分離，建物・禁止領域回避，最終XY検証，地表投影の順に実行する．地表投影はXYを変更せず，Terrain Meshと同じ区分三角形補間からGround TruthのZを決める．Genesis等のSimulator adapterはGround Truthを変更せず，モデルの足元Anchorと表示用clearanceだけを適用する．確定経路は物理衝突で変更せず，キネマティックな表示物体として再生する．
+
+Genesisの経路UIはXYを0.25 m以下へ細分化し，各点を地表から1 m上へ再投影する．鹿の初期代理物体は高さ1.5 mの不透明な閉立体で，足元を地表から3 cm上に置く．これらはViewer用表現であり，Tracker入力，観測判定，Ground Truthの正本ではない．将来のIsaac Sim・Unity adapterも同じGround Truth位置を入力とし，座標軸，モデル原点，足元Anchorだけを変換する．
 
 ## Phase 7 観測層
 

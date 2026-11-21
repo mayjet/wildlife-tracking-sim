@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Iterable
 
 import numpy as np
+from field_environment import EnvironmentCase
 from shepherd_contracts import CameraSpec, ObservationPointLayout
 
 from .cameras import camera_rotation_matrix
@@ -36,6 +37,17 @@ class GenesisRouteOverlay:
 
 
 @dataclass(frozen=True)
+class GenesisDeerProxy:
+    truth_id: str
+    foot_position: tuple[float, float, float]
+    heading_rad: float = 0.0
+    height_m: float = 1.5
+    length_m: float = 1.2
+    width_m: float = 0.5
+    color: tuple[float, float, float, float] = (0.72, 0.38, 0.12, 1.0)
+
+
+@dataclass(frozen=True)
 class GenesisVisibilityOverlay:
     visible_positions: np.ndarray
     hidden_positions: np.ndarray
@@ -62,6 +74,102 @@ class _Mesh:
         offset = len(self.vertices)
         self.vertices.extend(tuple(map(float, vertex)) for vertex in vertices)
         self.faces.extend(tuple(offset + int(index) for index in face) for face in faces)
+
+
+def _densify_polyline(coordinates: np.ndarray, spacing_m: float) -> np.ndarray:
+    coordinates = np.asarray(coordinates, dtype=np.float64)
+    if coordinates.ndim != 2 or coordinates.shape[1] != 2 or len(coordinates) < 2:
+        raise ValueError("route coordinates must have shape (n, 2), n >= 2")
+    if not np.isfinite(coordinates).all():
+        raise ValueError("route coordinates must be finite")
+    if not np.isfinite(spacing_m) or spacing_m <= 0.0:
+        raise ValueError("spacing_m must be finite and positive")
+    samples = []
+    for start, end in zip(coordinates[:-1], coordinates[1:]):
+        delta = end - start
+        length_m = float(np.linalg.norm(delta))
+        if length_m <= 0.0:
+            continue
+        step_count = max(1, int(np.ceil(length_m / spacing_m)))
+        samples.extend(
+            start + delta * (index / step_count) for index in range(step_count)
+        )
+    samples.append(coordinates[-1])
+    return np.asarray(samples, dtype=np.float64)
+
+
+# 経路UIをTerrainMeshと同じ地表へ再投影し，斜面への線分埋没を防ぐ．
+def drape_genesis_route_overlay(
+    environment_case: EnvironmentCase,
+    *,
+    route_id: str,
+    coordinates: np.ndarray,
+    waypoints: np.ndarray,
+    color: tuple[float, float, float, float] = (1.0, 0.10, 0.75, 0.98),
+    sample_spacing_m: float = 0.25,
+    height_above_surface_m: float = 1.0,
+) -> GenesisRouteOverlay:
+    if not np.isfinite(height_above_surface_m) or height_above_surface_m <= 0.0:
+        raise ValueError("height_above_surface_m must be finite and positive")
+    dense_xy = _densify_polyline(coordinates, sample_spacing_m)
+    positions = np.asarray(
+        [
+            (
+                float(x_m),
+                float(y_m),
+                environment_case.heightmap.surface_elevation_at(float(x_m), float(y_m))
+                + height_above_surface_m,
+            )
+            for x_m, y_m in dense_xy
+        ],
+        dtype=np.float64,
+    )
+    waypoint_xy = np.asarray(waypoints, dtype=np.float64)
+    if waypoint_xy.size == 0:
+        waypoint_positions = np.empty((0, 3), dtype=np.float64)
+    else:
+        if waypoint_xy.ndim != 2 or waypoint_xy.shape[1] != 2:
+            raise ValueError("waypoints must have shape (n, 2)")
+        waypoint_positions = np.asarray(
+            [
+                (
+                    float(x_m),
+                    float(y_m),
+                    environment_case.heightmap.surface_elevation_at(
+                        float(x_m), float(y_m)
+                    )
+                    + height_above_surface_m,
+                )
+                for x_m, y_m in waypoint_xy
+            ],
+            dtype=np.float64,
+        )
+    return GenesisRouteOverlay(
+        route_id=route_id,
+        positions=positions,
+        waypoints=waypoint_positions,
+        color=color,
+    )
+
+
+# 不透明な代理物体の足元を地表へ固定し，Simulator間で同じ接地規則を使う．
+def create_genesis_deer_proxy(
+    environment_case: EnvironmentCase,
+    *,
+    truth_id: str,
+    x_m: float,
+    y_m: float,
+    heading_rad: float = 0.0,
+    foot_clearance_m: float = 0.03,
+) -> GenesisDeerProxy:
+    if not np.isfinite(foot_clearance_m) or foot_clearance_m < 0.0:
+        raise ValueError("foot_clearance_m must be finite and non-negative")
+    ground_z_m = environment_case.heightmap.surface_elevation_at(x_m, y_m)
+    return GenesisDeerProxy(
+        truth_id=truth_id,
+        foot_position=(float(x_m), float(y_m), float(ground_z_m + foot_clearance_m)),
+        heading_rad=float(heading_rad),
+    )
 
 
 def _add_vertical_cylinder(
@@ -134,6 +242,46 @@ def _add_oriented_box(
         (3, 0, 4), (3, 4, 7),
     )
     mesh.add_vertices_and_faces(vertices, faces)
+
+
+def _deer_proxy_mesh(proxies: Iterable[GenesisDeerProxy]):
+    import trimesh
+
+    mesh = _Mesh()
+    face_colors: list[tuple[int, int, int, int]] = []
+    for proxy in proxies:
+        if proxy.height_m <= 0.0 or proxy.length_m <= 0.0 or proxy.width_m <= 0.0:
+            raise ValueError("deer proxy dimensions must be positive")
+        x_m, y_m, foot_z_m = proxy.foot_position
+        rotation = np.asarray(
+            (
+                (np.cos(proxy.heading_rad), -np.sin(proxy.heading_rad), 0.0),
+                (np.sin(proxy.heading_rad), np.cos(proxy.heading_rad), 0.0),
+                (0.0, 0.0, 1.0),
+            ),
+            dtype=np.float64,
+        )
+        _add_oriented_box(
+            mesh,
+            center=np.asarray(
+                (x_m, y_m, foot_z_m + proxy.height_m / 2.0), dtype=np.float64
+            ),
+            rotation=rotation,
+            size=(proxy.length_m, proxy.width_m, proxy.height_m),
+        )
+        rgba = tuple(
+            int(round(np.clip(channel, 0.0, 1.0) * 255.0))
+            for channel in proxy.color
+        )
+        face_colors.extend([rgba] * 12)
+    result = trimesh.Trimesh(
+        vertices=np.asarray(mesh.vertices, dtype=np.float64),
+        faces=np.asarray(mesh.faces, dtype=np.int64),
+        process=False,
+    )
+    if face_colors:
+        result.visual.face_colors = np.asarray(face_colors, dtype=np.uint8)
+    return result
 
 
 def _write_obj(path: Path, name: str, mesh: _Mesh) -> Path:
@@ -345,6 +493,7 @@ def draw_genesis_experiment_overlays(
     visibility: GenesisVisibilityOverlay | None = None,
     routes: tuple[GenesisRouteOverlay, ...] = (),
     rays: tuple[GenesisValidationRay, ...] = (),
+    deer_proxies: tuple[GenesisDeerProxy, ...] = (),
 ) -> None:
     scene = genesis_scene.scene
     if show_fov:
@@ -397,9 +546,11 @@ def draw_genesis_experiment_overlays(
             )
     for route in routes:
         if len(route.positions) >= 2:
-            scene.draw_debug_trajectory(route.positions, radius=0.35, color=route.color)
+            scene.draw_debug_trajectory(route.positions, radius=0.08, color=route.color)
         for waypoint in route.waypoints:
             scene.draw_debug_sphere(waypoint, radius=1.5, color=(1.0, 0.95, 0.05, 1.0))
+    if deer_proxies:
+        scene.draw_debug_mesh(_deer_proxy_mesh(deer_proxies))
     for ray in rays:
         scene.draw_debug_line(
             ray.start,

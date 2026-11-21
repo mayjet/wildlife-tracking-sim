@@ -19,6 +19,7 @@ from .dataset import (
     load_simulation_dataset,
     run_and_save_observation_dataset,
     run_and_save_simulation,
+    run_and_save_herd_simulation,
     save_observation_dataset,
     save_observations_for_layout,
     save_simulation_dataset,
@@ -39,9 +40,14 @@ from .simulator import (
     TrajectoryValidationError,
     simulate,
 )
+from .herd_config import HerdProfile, HerdSimulationConfig
+from .herd_formation import HerdMember, create_herd_members
+from .herd_simulator import simulate_herd
 from .observations import (
     BodySampleVisibility,
     CameraVisibility,
+    ObservationPositionErrorConfig,
+    ObservationPositionErrorModel,
     ObservationResult,
     ObservationRule,
     TargetVisibility,
@@ -65,7 +71,7 @@ from .phase7_validation import (
     validate_visibility_samples,
     visibility_overlay_positions,
 )
-from .terrain import surface_elevation_at
+from .terrain import project_to_terrain_surface, surface_elevation_at
 from .route_generators import (
     available_route_methods,
     generate_resolved_route,
@@ -97,6 +103,9 @@ from .waypoints import (
 __all__ = [
     "AuthoredExperiment",
     "LinearMotion",
+    "HerdMember",
+    "HerdProfile",
+    "HerdSimulationConfig",
     "AnalyticRaycastBackend",
     "BodySampleVisibility",
     "CameraVisibility",
@@ -109,6 +118,8 @@ __all__ = [
     "LoadedExperimentPlan",
     "MotionConfig",
     "ObservationResult",
+    "ObservationPositionErrorConfig",
+    "ObservationPositionErrorModel",
     "ObservationRule",
     "OcclusionKind",
     "RayOcclusion",
@@ -125,6 +136,7 @@ __all__ = [
     "WaypointSet",
     "WaypointSpec",
     "PlacementRequest",
+    "project_to_terrain_surface",
     "Phase7VisibilitySample",
     "VisibilityClass",
     "VisibilityConfig",
@@ -154,6 +166,7 @@ __all__ = [
     "plot_visibility_failures",
     "plot_visibility_map",
     "run_and_save_simulation",
+    "run_and_save_herd_simulation",
     "run_and_save_observation_dataset",
     "run_experiment_plan",
     "route_to_simulation_config",
@@ -164,6 +177,8 @@ __all__ = [
     "save_resolved_route",
     "save_simulation_dataset",
     "simulate",
+    "simulate_herd",
+    "create_herd_members",
     "save_waypoint_set",
     "surface_elevation_at",
     "resolve_route_generator",
