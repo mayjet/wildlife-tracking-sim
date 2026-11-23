@@ -7,6 +7,22 @@ from pathlib import Path
 from typing import Any
 
 
+_INITIALIZED_GENESIS_BACKENDS: dict[int, tuple[Any, str]] = {}
+
+
+def _initialize_genesis(genesis_module: Any, backend: str) -> None:
+    module_id = id(genesis_module)
+    initialized = _INITIALIZED_GENESIS_BACKENDS.get(module_id)
+    if initialized is None:
+        genesis_module.init(backend=_resolve_backend(genesis_module, backend))
+        _INITIALIZED_GENESIS_BACKENDS[module_id] = (genesis_module, backend)
+    elif initialized[1] != backend:
+        raise RuntimeError(
+            "Genesis is already initialized with a different backend: "
+            f"{initialized[1]}"
+        )
+
+
 @dataclass(frozen=True)
 class GenesisStatus:
     installed: bool
@@ -44,6 +60,7 @@ class GenesisScene:
     usd_path: Path | None
     backend: str
     asset_paths: tuple[Path, ...] = ()
+    entity_names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -53,6 +70,14 @@ class GenesisMeshSource:
     color: tuple[float, float, float]
     opacity: float = 1.0
     double_sided: bool = True
+
+
+@dataclass(frozen=True)
+class GenesisActorSpec:
+    name: str
+    position: tuple[float, float, float]
+    size: tuple[float, float, float]
+    color: tuple[float, float, float]
 
 
 def inspect_genesis() -> GenesisStatus:
@@ -107,7 +132,18 @@ def _resolve_backend(genesis_module: Any, backend: str) -> Any:
     return getattr(genesis_module, attribute)
 
 
-def _create_scene(genesis_module: Any, options: GenesisViewerOptions, show_viewer: bool) -> Any:
+def _create_scene(
+    genesis_module: Any,
+    options: GenesisViewerOptions,
+    show_viewer: bool,
+    *,
+    zero_gravity: bool = False,
+) -> Any:
+    arguments = {}
+    if zero_gravity:
+        arguments["sim_options"] = genesis_module.options.SimOptions(
+            gravity=(0.0, 0.0, 0.0)
+        )
     return genesis_module.Scene(
         viewer_options=genesis_module.options.ViewerOptions(
             res=options.resolution,
@@ -127,6 +163,7 @@ def _create_scene(genesis_module: Any, options: GenesisViewerOptions, show_viewe
             ambient_light=(0.35, 0.35, 0.35),
         ),
         show_viewer=show_viewer,
+        **arguments,
     )
 
 
@@ -148,7 +185,7 @@ def build_genesis_scene(
     import genesis as gs
 
     options = viewer_options or GenesisViewerOptions()
-    gs.init(backend=_resolve_backend(gs, backend))
+    _initialize_genesis(gs, backend)
     scene = _create_scene(gs, options, show_viewer)
     entities = scene.add_stage(
         morph=gs.morphs.USD(
@@ -180,6 +217,7 @@ def build_genesis_mesh_scene(
     show_viewer: bool = False,
     viewer_options: GenesisViewerOptions | None = None,
     collision: bool = False,
+    actors: tuple[GenesisActorSpec, ...] = (),
 ) -> GenesisScene:
     if not sources:
         raise ValueError("at least one Genesis mesh source is required")
@@ -202,9 +240,10 @@ def build_genesis_mesh_scene(
     import genesis as gs
 
     options = viewer_options or GenesisViewerOptions()
-    gs.init(backend=_resolve_backend(gs, backend))
-    scene = _create_scene(gs, options, show_viewer)
+    _initialize_genesis(gs, backend)
+    scene = _create_scene(gs, options, show_viewer, zero_gravity=bool(actors))
     entities = []
+    entity_names = []
     for source in resolved_sources:
         entity = scene.add_entity(
             morph=gs.morphs.Mesh(
@@ -228,6 +267,28 @@ def build_genesis_mesh_scene(
             name=source.name,
         )
         entities.append(entity)
+        entity_names.append(source.name)
+    for actor in actors:
+        entity = scene.add_entity(
+            morph=gs.morphs.Box(
+                pos=actor.position,
+                size=actor.size,
+                fixed=False,
+                visualization=True,
+                collision=False,
+            ),
+            surface=gs.surfaces.Default(
+                color=actor.color,
+                opacity=1.0,
+                roughness=0.9,
+                metallic=0.0,
+                double_sided=True,
+            ),
+            vis_mode="visual",
+            name=actor.name,
+        )
+        entities.append(entity)
+        entity_names.append(actor.name)
     scene.build()
     return GenesisScene(
         scene=scene,
@@ -235,6 +296,7 @@ def build_genesis_mesh_scene(
         usd_path=None,
         backend=backend,
         asset_paths=tuple(source.path for source in resolved_sources),
+        entity_names=tuple(entity_names),
     )
 
 

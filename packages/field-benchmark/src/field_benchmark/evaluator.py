@@ -128,12 +128,12 @@ def evaluate_saved_run(
     )
     metrics_path = run_directory / "benchmark_metrics.json"
     assignments_path = run_directory / "benchmark_assignments.parquet"
-    if (metrics_path.exists() or assignments_path.exists()) and not overwrite:
-        raise FileExistsError(f"benchmark result already exists: {run_directory}")
-    metrics_path.write_text(
-        json.dumps(asdict(result.metrics), ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    result.assignments.to_parquet(assignments_path, index=False, engine="pyarrow")
+    if overwrite or not metrics_path.exists():
+        metrics_path.write_text(
+            json.dumps(asdict(result.metrics), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    if overwrite or not assignments_path.exists():
+        result.assignments.to_parquet(assignments_path, index=False, engine="pyarrow")
     return result
 
 
@@ -181,10 +181,10 @@ def evaluate_saved_group_run(
         "group_observation_events.parquet": result.non_observation_events,
         "group_duration_summary.parquet": result.duration_summary,
     }
-    if any((run_directory / name).exists() for name in outputs) and not overwrite:
-        raise FileExistsError(f"group benchmark result already exists: {run_directory}")
     for name, output in outputs.items():
         path = run_directory / name
+        if path.exists() and not overwrite:
+            continue
         if isinstance(output, str):
             path.write_text(output, encoding="utf-8")
         else:

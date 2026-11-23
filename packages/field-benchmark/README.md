@@ -106,4 +106,4 @@ runs/<run_id>/
 └── group_benchmark_metrics.json
 ```
 
-一括実験は[`batch.py`](src/field_benchmark/batch.py)が実行し，`cases/<case_id>/benchmarks/<benchmark_id>/`へ条件別比較表を保存する．Notebookの入口は[`05_benchmark.ipynb`](../../workspace/05_benchmark.ipynb)である．全体仕様は[`docs/benchmark-spec.md`](../../docs/benchmark-spec.md)を参照する．
+一括実験は[`workspace/run_experiments.py`](../../workspace/run_experiments.py)がDataset生成から評価まで実行し，`cases/<case_id>/benchmarks/<benchmark_id>/`へ条件別比較表を保存する．[`05_benchmark.ipynb`](../../workspace/05_benchmark.ipynb)は保存済み結果だけを分析する．全体仕様は[`docs/benchmark-spec.md`](../../docs/benchmark-spec.md)を参照する．

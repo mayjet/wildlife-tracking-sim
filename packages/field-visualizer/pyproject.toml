@@ -15,8 +15,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-rerun = ["rerun-sdk>=0.33,<0.34"]
+rerun = ["rerun-sdk>=0.22,<0.23"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
-

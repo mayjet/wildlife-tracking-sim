@@ -7,9 +7,14 @@ import pandas as pd
 from nbclient import NotebookClient
 
 from field_environment import FarmBoundary, TerrainGridSpec, create_synthetic_case, save_case
+from field_benchmark import (
+    BenchmarkExecutionJournal,
+    ExecutionCondition,
+    run_benchmark_matrix,
+)
 
 
-def test_benchmark_notebook_executes_with_observation_only_input(tmp_path, monkeypatch) -> None:
+def test_benchmark_notebook_analyzes_saved_observation_only_runs(tmp_path, monkeypatch) -> None:
     repository_root = Path(__file__).resolve().parents[3]
     cases_root = tmp_path / "cases"
     case_id = "benchmark-notebook-case"
@@ -54,6 +59,26 @@ def test_benchmark_notebook_executes_with_observation_only_input(tmp_path, monke
         }
     ).to_parquet(observation_directory / "observations.parquet", index=False)
     monkeypatch.setenv("WILDLIFE_CASES_ROOT", str(cases_root))
+    run_benchmark_matrix(
+        cases_root,
+        case_id=case_id,
+        benchmark_id="benchmark-notebook-v1",
+        tracker_methods=("last_observation", "constant_velocity"),
+        tracker_settings={},
+        tracker_seed=42,
+    )
+    conditions = tuple(
+        ExecutionCondition(dataset_id, layout_id, method)
+        for method in ("last_observation", "constant_velocity")
+    )
+    journal = BenchmarkExecutionJournal(
+        cases_root,
+        case_id=case_id,
+        benchmark_id="benchmark-notebook-v1",
+        conditions=conditions,
+    )
+    for condition in conditions:
+        journal.mark_completed(condition)
 
     notebook = nbformat.read(repository_root / "workspace/05_benchmark.ipynb", as_version=4)
     for cell in notebook.cells:
@@ -65,10 +90,6 @@ CASE_ID = {case_id!r}
 BENCHMARK_ID = "benchmark-notebook-v1"
 DATASET_IDS = [{dataset_id!r}]
 LAYOUT_IDS = [{layout_id!r}]
-tracker_methods = ["last_observation", "constant_velocity"]
-TRACKER_SEED = 42
-OVERWRITE = False
-ENABLE_RERUN = False
 '''
         if "REPOSITORY_ROOT = find_repository_root()" in cell.source:
             cell.source = cell.source.replace(

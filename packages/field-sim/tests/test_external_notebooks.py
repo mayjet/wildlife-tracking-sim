@@ -70,6 +70,8 @@ camera_settings = {"pole_height_m": 5.0, "horizontal_fov_deg": 60.0,
 route_methods = ["direct"]
 route_settings = {}
 seeds = [5]
+tracker_methods = ["last_observation"]
+tracker_seed = 42
 """
     _cell_by_id(simulation_notebook, "visibility-simulation-settings").source = """
 visibility_settings = {
@@ -90,7 +92,6 @@ ENABLE_WAYPOINT_EDITOR = False
 PREVIEW_LAYOUT_ID = None
 VISIBILITY_MAP_CELL_SIZE_M = 40.0
 RUN_FORMAL_1M_EVALUATION = False
-RUN_BATCH = True
 OVERWRITE_GENERATED_YAML = True
 OVERWRITE_CASE_RESULTS = False
 """
@@ -103,6 +104,5 @@ OVERWRITE_CASE_RESULTS = False
     case_directory = cases_root / "alos-notebook-integration"
     assert (case_directory / "source/jaxa/aw3d30_dsm.tif").is_file()
     assert (case_directory / "environment.usd").is_file()
-    dataset = case_directory / "datasets/external-corridor-v1-direct-v1-seed5"
-    assert (dataset / "ground_truth.parquet").is_file()
-    assert (dataset / "observations/grid-40m-cam6-v1/observations.parquet").is_file()
+    assert not list((case_directory / "datasets").glob("*/ground_truth.parquet"))
+    assert (tmp_path / "experiments/external-notebook-v1/experiment.yaml").is_file()

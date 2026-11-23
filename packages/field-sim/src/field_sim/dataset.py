@@ -431,10 +431,44 @@ def save_observations_for_layout(
         if observation_directory.exists():
             shutil.rmtree(observation_directory)
         temporary.replace(observation_directory)
+        update_dataset_observation_manifest(
+            cases_root, case_id, dataset_id, layout.layout_id
+        )
     except Exception:
         shutil.rmtree(temporary, ignore_errors=True)
         raise
     return observation_directory
+
+
+def update_dataset_observation_manifest(
+    cases_root: str | Path,
+    case_id: str,
+    dataset_id: str,
+    layout_id: str,
+) -> None:
+    """Record layout-specific Observation artifacts in the parent Dataset manifest."""
+    case_directory = resolve_case_path(cases_root, case_id)
+    dataset_directory = case_directory / "datasets" / _validate_dataset_id(dataset_id)
+    observation_path = (
+        dataset_directory / "observations" / layout_id / "observations.parquet"
+    )
+    if not observation_path.is_file():
+        raise FileNotFoundError(f"Observation table not found: {observation_path}")
+    manifest_path = dataset_directory / "manifest.json"
+    document = json.loads(manifest_path.read_text(encoding="utf-8"))
+    scenario = dict(document.get("scenario_config", {}))
+    refs = dict(scenario.get("observation_data_refs", {}))
+    refs[layout_id] = str(observation_path.relative_to(case_directory))
+    refs = dict(sorted(refs.items()))
+    scenario["observation_data_status"] = "generated_per_layout"
+    scenario["observation_data_refs"] = refs
+    document["scenario_config"] = scenario
+    document["observation_data_ref"] = refs[sorted(refs)[0]]
+    temporary = manifest_path.with_name(f".{manifest_path.name}.{uuid4().hex}.tmp")
+    temporary.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    temporary.replace(manifest_path)
 
 
 def run_and_save_simulation(

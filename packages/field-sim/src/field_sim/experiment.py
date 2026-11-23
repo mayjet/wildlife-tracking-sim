@@ -62,6 +62,8 @@ class ExperimentPlan(BaseModel):
     simulation: ExperimentSimulation = ExperimentSimulation()
     herd_profiles: tuple[HerdProfile, ...] = ()
     include_single_individual: bool = True
+    tracker_methods: tuple[str, ...] = ("last_observation", "constant_velocity")
+    tracker_seed: int = 42
 
     @model_validator(mode="after")
     def validate_ids(self) -> "ExperimentPlan":
@@ -69,6 +71,8 @@ class ExperimentPlan(BaseModel):
         validate_case_id(self.case_id)
         if not self.seeds:
             raise ValueError("at least one seed is required")
+        if not self.tracker_methods or any(not item for item in self.tracker_methods):
+            raise ValueError("at least one tracker method is required")
         return self
 
 

@@ -56,7 +56,7 @@ Case -> Environment -> Simulation Backend -> Ground Truth
 
 Ground TruthからTrackerへの経路は存在しない．Evaluatorは観測・推定とGround Truthを別入力として受け取る．DatasetにはTracker入力用の観測と評価用の真値を論理的または物理的に分離して保存する．
 
-`field-tracker`のRunnerは`ObservationFrame`だけを引数に取り，複数Cameraの同位置観測を統合してから個体Trackへ対応付ける．内部状態はRun成果物へ保存するが，公開出力はContractsの`TrackingFrame`へ変換する．`field-benchmark`だけが保存済みGround TruthとTrackを対応付ける．`05_benchmark.ipynb`はこの二段階を順番に実行する．
+`field-tracker`のRunnerは`ObservationFrame`だけを引数に取り，複数Cameraの同位置観測を統合してから個体Trackへ対応付ける．内部状態はRun成果物へ保存するが，公開出力はContractsの`TrackingFrame`へ変換する．`field-benchmark`だけが保存済みGround TruthとTrackを対応付ける．これらの長時間処理は`workspace/run_experiments.py`が実行し，`05_benchmark.ipynb`は保存済み結果だけを分析する．
 
 ## Backend境界
 
@@ -186,6 +186,10 @@ workspace/04_simulation.ipynb
 移動処理は，XY経路決定，個体間分離，建物・禁止領域回避，最終XY検証，地表投影の順に実行する．地表投影はXYを変更せず，Terrain Meshと同じ区分三角形補間からGround TruthのZを決める．Genesis等のSimulator adapterはGround Truthを変更せず，モデルの足元Anchorと表示用clearanceだけを適用する．確定経路は物理衝突で変更せず，キネマティックな表示物体として再生する．
 
 Genesisの経路UIはXYを0.25 m以下へ細分化し，各点を地表から1 m上へ再投影する．鹿の初期代理物体は高さ1.5 mの不透明な閉立体で，足元を地表から3 cm上に置く．これらはViewer用表現であり，Tracker入力，観測判定，Ground Truthの正本ではない．将来のIsaac Sim・Unity adapterも同じGround Truth位置を入力とし，座標軸，モデル原点，足元Anchorだけを変換する．
+
+長時間の一括実験は`workspace/run_experiments.py`を入口とする．Parquetを数値結果の正本，Genesisを任意の3D再生Adapter，Rerunを2Dライブ表示と再生記録として分離する．Tracker Runnerは`ObservationFrame`だけを受け取り，各時刻の結果を購読Callbackへ通知する．Callbackは同時刻のGround TruthをRerunとGenesisへ表示できるが，Trackerへ戻さない．実験状態は`execution_manifest.json`へ条件単位で保存し，中断時の`RUNNING`を次回起動時に`PENDING`へ戻す．
+
+数値結果の時刻刻みはDatasetの`simulation_step_s`を維持する．今回の実験RunnerはGenesisのキネマティックActorへGround Truthを反映してSimulatorを進め，GUIが利用可能な場合は同じSceneを表示する．鹿のXYは行動モデルの結果から変更せず，Zだけ地表へ追従させる．表示だけはGround Truth間を線形補間して最大10 FPSとし，補間値を評価やParquetへ混入させない．Rerun Web Viewerは実験Runnerと別プロセスで動かし，Runごとに`recording.rrd`も保存する．表示系の停止・切断は，保存済みDatasetやRunを変更しない．
 
 ## Phase 7 観測層
 

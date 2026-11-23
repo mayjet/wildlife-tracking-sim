@@ -10,6 +10,9 @@ from shapely.geometry import Polygon, box, mapping
 
 import field_campost.genesis as genesis_module
 from field_campost import (
+    GenesisActorSpec,
+    GenesisDeerFrame,
+    GenesisDeerProxy,
     GenesisMeshSource,
     GenesisScene,
     GenesisStatus,
@@ -17,6 +20,7 @@ from field_campost import (
     build_genesis_mesh_scene,
     build_genesis_scene,
     inspect_genesis,
+    interpolate_genesis_deer_frames,
     run_genesis_viewer,
     write_genesis_mesh_assets,
 )
@@ -37,6 +41,22 @@ def test_viewer_options_reject_invalid_values():
         GenesisViewerOptions(resolution=(0, 720))
     with pytest.raises(ValueError, match="camera_fov_deg"):
         GenesisViewerOptions(camera_fov_deg=180.0)
+
+
+def test_genesis_deer_frames_are_interpolated_for_display_only():
+    first = GenesisDeerFrame(
+        timestamp_s=0.0,
+        proxies=(GenesisDeerProxy("deer-1", (0.0, 0.0, 10.0)),),
+        maximum_surface_difference_m=0.0,
+    )
+    second = GenesisDeerFrame(
+        timestamp_s=1.0,
+        proxies=(GenesisDeerProxy("deer-1", (2.0, 4.0, 12.0)),),
+        maximum_surface_difference_m=0.0,
+    )
+    middle = interpolate_genesis_deer_frames(first, second, 0.5)
+    assert middle.timestamp_s == 0.5
+    assert middle.proxies[0].foot_position == (1.0, 2.0, 11.0)
 
 
 def test_build_genesis_scene_uses_visual_only_usd(monkeypatch, tmp_path):
@@ -239,3 +259,53 @@ def test_build_genesis_mesh_scene_adds_each_visual_layer(monkeypatch, tmp_path):
     assert [call["name"] for call in calls["entities"]] == ["terrain", "forest"]
     assert calls["entities"][0]["morph"].parameters["collision"] is False
     assert calls["built"] is True
+
+
+def test_build_genesis_mesh_scene_adds_dynamic_actor(monkeypatch, tmp_path):
+    terrain_path = tmp_path / "terrain.obj"
+    terrain_path.write_text("o terrain\nv 0 0 0\n", encoding="utf-8")
+    calls = {"entities": []}
+
+    class FakeScene:
+        def __init__(self, **kwargs):
+            calls["scene"] = kwargs
+
+        def add_entity(self, **kwargs):
+            calls["entities"].append(kwargs)
+            return kwargs["name"]
+
+        def build(self):
+            pass
+
+    class FakeMorph:
+        def __init__(self, **kwargs):
+            self.parameters = kwargs
+
+    fake_genesis = SimpleNamespace(
+        cpu="cpu-backend",
+        gpu="gpu-backend",
+        cuda="cuda-backend",
+        init=lambda **kwargs: None,
+        Scene=FakeScene,
+        options=SimpleNamespace(
+            ViewerOptions=lambda **kwargs: SimpleNamespace(**kwargs),
+            VisOptions=lambda **kwargs: SimpleNamespace(**kwargs),
+            SimOptions=lambda **kwargs: SimpleNamespace(**kwargs),
+        ),
+        morphs=SimpleNamespace(Mesh=FakeMorph, Box=FakeMorph),
+        surfaces=SimpleNamespace(Default=lambda **kwargs: SimpleNamespace(**kwargs)),
+    )
+    monkeypatch.setitem(sys.modules, "genesis", fake_genesis)
+    monkeypatch.setattr(
+        genesis_module,
+        "inspect_genesis",
+        lambda: GenesisStatus(True, "test", False, "mesh available", True),
+    )
+    result = build_genesis_mesh_scene(
+        (GenesisMeshSource("terrain", terrain_path, (0.4, 0.3, 0.2)),),
+        backend="cpu",
+        actors=(GenesisActorSpec("deer-1", (1.0, 2.0, 3.0), (1.2, 0.5, 1.5), (0.7, 0.3, 0.1)),),
+    )
+    assert result.entity_names == ("terrain", "deer-1")
+    assert calls["entities"][1]["morph"].parameters["collision"] is False
+    assert calls["scene"]["sim_options"].gravity == (0.0, 0.0, 0.0)

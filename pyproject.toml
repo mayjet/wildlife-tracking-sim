@@ -1,0 +1,51 @@
+[project]
+name = "wildlife-tracking-sim"
+version = "0.1.0"
+description = "Reproducible experiment environment for wildlife tracking simulation"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "field-benchmark",
+    "field-campost",
+    "field-environment[alos]",
+    "field-sim[notebook]",
+    "field-tracker",
+    "field-visualizer[rerun]",
+    "geopandas==1.1.4",
+    "jupyterlab==4.6.4",
+    "pytest==9.1.1",
+]
+
+[project.optional-dependencies]
+x86 = [
+    "embreex==4.4.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "genesis-world==1.4.5; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "numpy==1.26.4; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "rerun-sdk==0.22.1; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "torch==2.8.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[tool.uv]
+package = false
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+[tool.uv.sources]
+shepherd-contracts = { workspace = true }
+field-environment = { workspace = true }
+field-campost = { workspace = true }
+field-sim = { workspace = true }
+field-tracker = { workspace = true }
+field-benchmark = { workspace = true }
+field-visualizer = { workspace = true }
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'linux' and platform_machine == 'x86_64'" },
+]
+
+[tool.uv.workspace]
+members = ["libs/*", "packages/*"]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

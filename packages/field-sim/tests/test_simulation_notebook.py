@@ -53,6 +53,8 @@ camera_settings = {
 route_methods = ["direct"]
 route_settings = {}
 seeds = [4]
+tracker_methods = ["last_observation"]
+tracker_seed = 42
 """
     _cell_by_id(notebook, "visibility-simulation-settings").source = """
 visibility_settings = {
@@ -73,7 +75,6 @@ ENABLE_WAYPOINT_EDITOR = False
 PREVIEW_LAYOUT_ID = None
 VISIBILITY_MAP_CELL_SIZE_M = 40.0
 RUN_FORMAL_1M_EVALUATION = False
-RUN_BATCH = True
 OVERWRITE_GENERATED_YAML = True
 OVERWRITE_CASE_RESULTS = False
 """
@@ -83,9 +84,8 @@ OVERWRITE_CASE_RESULTS = False
         kernel_name="python3",
         resources={"metadata": {"path": str(repository_root)}},
     ).execute()
-    dataset = cases_root / case_id / "datasets/notebook-corridor-v1-direct-v1-seed4"
-    assert (dataset / "ground_truth.parquet").is_file()
-    assert (dataset / "observations/grid-40m-cam6-v1/observations.parquet").is_file()
+    assert not list((cases_root / case_id / "datasets").glob("*/ground_truth.parquet"))
+    assert (tmp_path / "experiments/notebook-experiment-v1/experiment.yaml").is_file()
     assert (
         cases_root
         / case_id

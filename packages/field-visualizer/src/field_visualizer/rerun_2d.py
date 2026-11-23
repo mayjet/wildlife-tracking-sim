@@ -55,65 +55,20 @@ def log_tracking_replay(
     observation_point_layout: ObservationPointLayout | None = None,
     application_id: str = "wildlife-tracking-replay",
     recording_path: str | Path | None = None,
+    grpc_url: str | None = None,
     spawn: bool = False,
 ) -> None:
-    rr = _rerun()
-    rr.init(application_id, spawn=spawn)
-    if recording_path is not None:
-        rr.set_sinks(rr.FileSink(str(recording_path)))
-    rr.set_time("simulation_time", duration=0.0)
-    terrain_bounds = environment_case.heightmap.bounds
-    rr.log(
-        "world/terrain_extent",
-        rr.LineStrips2D(
-            [
-                [
-                    [terrain_bounds.min_x_m, terrain_bounds.min_y_m],
-                    [terrain_bounds.max_x_m, terrain_bounds.min_y_m],
-                    [terrain_bounds.max_x_m, terrain_bounds.max_y_m],
-                    [terrain_bounds.min_x_m, terrain_bounds.max_y_m],
-                    [terrain_bounds.min_x_m, terrain_bounds.min_y_m],
-                ]
-            ],
-            colors=[120, 120, 120],
-            radii=1.0,
-        ),
-        static=True,
+    if recording_path is None:
+        raise ValueError("recording_path is required for reproducible replay")
+    from .live_session import RerunLiveSession
+
+    session = RerunLiveSession(
+        run_id=application_id,
+        recording_path=recording_path,
+        grpc_url=grpc_url,
+        application_id=application_id,
     )
-    rr.log(
-        "world/farm_boundary",
-        rr.LineStrips2D(
-            _polygon_lines(environment_case.farm_boundary.polygon),
-            colors=[255, 0, 0],
-            radii=1.5,
-        ),
-        static=True,
-    )
-    for name, layer, color in (
-        ("forest", environment_case.forest, [30, 120, 30]),
-        ("buildings", environment_case.buildings, [230, 140, 40]),
-    ):
-        lines = _feature_lines(layer)
-        if lines:
-            rr.log(
-                f"world/{name}",
-                rr.LineStrips2D(lines, colors=color, radii=0.8),
-                static=True,
-            )
-    if observation_point_layout is not None:
-        rr.log(
-            "world/observation_points",
-            rr.Points2D(
-                [
-                    [point.position.x_m, point.position.y_m]
-                    for point in observation_point_layout.points
-                ],
-                colors=[30, 80, 255],
-                radii=2.0,
-                labels=[point.point_id for point in observation_point_layout.points],
-            ),
-            static=True,
-        )
+    session.log_environment(environment_case, observation_point_layout)
     observations_by_time = {frame.timestamp_s: frame for frame in observation_frames}
     tracking_by_time = {frame.timestamp_s: frame for frame in tracking_frames}
     truth_by_time = {frame.timestamp_s: frame for frame in ground_truth_frames}
@@ -121,36 +76,10 @@ def log_tracking_replay(
         set(observations_by_time) | set(tracking_by_time) | set(truth_by_time)
     )
     for timestamp_s in timestamps:
-        rr.set_time("simulation_time", duration=float(timestamp_s))
-        truth = truth_by_time.get(timestamp_s)
-        if truth is not None:
-            rr.log(
-                "world/ground_truth",
-                rr.Points2D(
-                    [[state.position.x_m, state.position.y_m] for state in truth.states],
-                    colors=[0, 180, 255],
-                    radii=2.0,
-                    labels=[state.truth_id for state in truth.states],
-                ),
-            )
-        observation = observations_by_time.get(timestamp_s)
-        if observation is not None:
-            rr.log(
-                "world/observations",
-                rr.Points2D(
-                    [[item.position.x_m, item.position.y_m] for item in observation.observations],
-                    colors=[255, 255, 0],
-                    radii=1.5,
-                ),
-            )
-        tracking = tracking_by_time.get(timestamp_s)
-        if tracking is not None:
-            rr.log(
-                "world/tracks",
-                rr.Points2D(
-                    [[item.position.x_m, item.position.y_m] for item in tracking.tracks],
-                    colors=[255, 0, 255],
-                    radii=2.0,
-                    labels=[item.track_id for item in tracking.tracks],
-                ),
-            )
+        session.log_frame(
+            timestamp_s=timestamp_s,
+            ground_truth=truth_by_time.get(timestamp_s),
+            observations=observations_by_time.get(timestamp_s),
+            tracking=tracking_by_time.get(timestamp_s),
+        )
+    session.close()

@@ -6,6 +6,11 @@ from .evaluator import (
     evaluate_tracking_tables,
 )
 from .events import extract_non_observation_events
+from .execution import (
+    BenchmarkExecutionJournal,
+    ExecutionCondition,
+    ExecutionStatus,
+)
 from .group_metrics import (
     GroupBenchmarkResult,
     GroupTrackingMetrics,
@@ -16,6 +21,9 @@ from .group_truth import build_group_observation_table, build_group_truth_table
 __all__ = [
     "BenchmarkBatchResult",
     "BenchmarkResult",
+    "BenchmarkExecutionJournal",
+    "ExecutionCondition",
+    "ExecutionStatus",
     "GroupBenchmarkResult",
     "GroupTrackingMetrics",
     "TrackingMetrics",

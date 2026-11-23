@@ -228,6 +228,8 @@ def author_experiment(
     simulation: Mapping[str, object] | None = None,
     herd_profiles: Sequence[HerdProfile | Mapping[str, object]] = (),
     include_single_individual: bool = True,
+    tracker_methods: Sequence[str] = ("last_observation", "constant_velocity"),
+    tracker_seed: int = 42,
     overwrite: bool = True,
 ) -> AuthoredExperiment:
     validate_case_id(experiment_id)
@@ -363,6 +365,8 @@ def author_experiment(
                 for item in herd_profiles
             ]
         plan_payload["include_single_individual"] = include_single_individual
+        plan_payload["tracker_methods"] = list(tracker_methods)
+        plan_payload["tracker_seed"] = tracker_seed
         plan_path = temporary / "experiment.yaml"
         _write_commented_yaml(
             plan_path,
@@ -378,6 +382,8 @@ def author_experiment(
                 (0, "simulation"): "鹿の速度と時間刻み",
                 (0, "herd_profiles"): "全て試す群れ構成",
                 (0, "include_single_individual"): "従来の単独個体も実験するか",
+                (0, "tracker_methods"): "全て実行するTracker方式",
+                (0, "tracker_seed"): "Trackerの再現用seed",
                 (2, "preview_cell_size_m"): "高速確認の評価間隔m",
                 (2, "intermediate_cell_size_m"): "中間確認の評価間隔m",
                 (2, "evaluation_cell_size_m"): "正式評価の間隔m",

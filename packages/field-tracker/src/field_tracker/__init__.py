@@ -9,7 +9,7 @@ from .lifecycle import (
     TrackerLifecycleState,
 )
 from .measurement_fusion import FusedMeasurement, fuse_observations
-from .runner import TrackingResult, run_tracker
+from .runner import TrackingResult, run_tracker, run_tracker_stream
 from .registry import available_tracker_methods, create_tracker
 from .storage import load_observation_frames, save_tracking_run
 from .trackers import ConstantVelocityTracker, LastObservationTracker
@@ -35,5 +35,6 @@ __all__ = [
     "fuse_observations",
     "load_observation_frames",
     "run_tracker",
+    "run_tracker_stream",
     "save_tracking_run",
 ]

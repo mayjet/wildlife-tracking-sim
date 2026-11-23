@@ -13,6 +13,7 @@ from .case_io import (
     save_case_scene,
 )
 from .genesis import (
+    GenesisActorSpec,
     GenesisMeshSource,
     GenesisScene,
     GenesisStatus,
@@ -37,7 +38,13 @@ from .genesis_experiment import (
     write_experiment_scene_layers,
     write_observation_infrastructure_assets,
 )
-from .genesis_runtime import GenesisDeerFrame, build_genesis_deer_frame
+from .genesis_runtime import (
+    GenesisDeerFrame,
+    GenesisExperimentRuntime,
+    build_genesis_deer_frame,
+    genesis_deer_actor_specs,
+    interpolate_genesis_deer_frames,
+)
 from .mesh import TerrainMesh, heightmap_to_mesh, validate_mesh_against_heightmap
 from .observation_points import (
     CameraMountProfile,
@@ -78,6 +85,8 @@ __all__ = [
     "CameraMountProfile",
     "CameraMountDefinition",
     "GenesisDeerFrame",
+    "GenesisActorSpec",
+    "GenesisExperimentRuntime",
     "GenesisDeerProxy",
     "GenesisMeshAssets",
     "GenesisInfrastructureAssets",
@@ -99,6 +108,8 @@ __all__ = [
     "build_genesis_mesh_scene",
     "build_genesis_scene",
     "build_genesis_deer_frame",
+    "genesis_deer_actor_specs",
+    "interpolate_genesis_deer_frames",
     "build_field_summary",
     "create_fixed_camera_layout",
     "create_genesis_deer_proxy",

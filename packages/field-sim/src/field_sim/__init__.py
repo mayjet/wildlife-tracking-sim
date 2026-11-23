@@ -23,6 +23,7 @@ from .dataset import (
     save_observation_dataset,
     save_observations_for_layout,
     save_simulation_dataset,
+    update_dataset_observation_manifest,
 )
 from .batch import ExperimentBatchResult, run_experiment_plan
 from .experiment import (
@@ -176,6 +177,7 @@ __all__ = [
     "save_experiment_snapshot",
     "save_resolved_route",
     "save_simulation_dataset",
+    "update_dataset_observation_manifest",
     "simulate",
     "simulate_herd",
     "create_herd_members",

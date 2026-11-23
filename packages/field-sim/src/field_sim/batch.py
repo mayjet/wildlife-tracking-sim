@@ -17,9 +17,10 @@ from .dataset import (
     run_and_save_simulation,
     save_simulation_dataset,
     save_observations_for_layout,
+    update_dataset_observation_manifest,
 )
 from .experiment import LoadedExperimentPlan, save_experiment_snapshot
-from .observations import VisibilityConfig
+from .observations import ObservationPositionErrorConfig, VisibilityConfig
 from .route_generators import generate_resolved_route, load_route_inputs
 from .routes import route_to_simulation_config, save_resolved_route
 from .herd_config import HerdSimulationConfig
@@ -140,7 +141,24 @@ def run_experiment_plan(
                 / dataset_id
             )
             if dataset_directory.exists() and not overwrite:
-                load_simulation_dataset(cases_root, loaded.plan.case_id, dataset_id)
+                existing_dataset = load_simulation_dataset(
+                    cases_root, loaded.plan.case_id, dataset_id
+                )
+                manifest = existing_dataset.manifest
+                stored_config = json.loads(
+                    (dataset_directory / "simulation_config.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                if (
+                    manifest.seed != combination.seed
+                    or manifest.simulation_step_s != loaded.plan.simulation.step_s
+                    or stored_config != config.model_dump(mode="json")
+                ):
+                    raise ValueError(
+                        f"stored Dataset differs from experiment plan: {dataset_id}; "
+                        "use versioned route/profile IDs"
+                    )
             else:
                 if profile is None:
                     run_and_save_simulation(cases_root, config, overwrite=overwrite)
@@ -162,6 +180,32 @@ def run_experiment_plan(
                     visibility,
                     loaded.plan.visibility.observation_position_error,
                     overwrite=overwrite,
+                )
+            else:
+                stored_visibility = VisibilityConfig.model_validate_json(
+                    (observation_directory / "visibility_config.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                stored_error = ObservationPositionErrorConfig.model_validate_json(
+                    (
+                        observation_directory
+                        / "observation_position_error_config.json"
+                    ).read_text(encoding="utf-8")
+                )
+                if (
+                    stored_visibility != visibility
+                    or stored_error != loaded.plan.visibility.observation_position_error
+                ):
+                    raise ValueError(
+                        "stored Observation differs from experiment plan: "
+                        f"{dataset_id}/{layout.layout_id}"
+                    )
+                update_dataset_observation_manifest(
+                    cases_root,
+                    loaded.plan.case_id,
+                    dataset_id,
+                    layout.layout_id,
                 )
             statuses[combination.combination_id] = "completed"
         except Exception as error:

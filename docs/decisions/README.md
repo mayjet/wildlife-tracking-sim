@@ -6,3 +6,4 @@
 
 - [0006：群れ真値・Tracker・Evaluatorの分離](0006-herd-tracker-and-evaluator-isolation.md)
 - [0007：地表追従とSimulator adapterの責務](0007-surface-following-and-simulator-adapters.md)
+- [0008：実験Runnerと表示処理の分離](0008-experiment-runner-and-viewer-isolation.md)

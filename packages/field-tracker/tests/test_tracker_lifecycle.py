@@ -9,6 +9,7 @@ from field_tracker import (
     create_tracker,
     fuse_observations,
     run_tracker,
+    run_tracker_stream,
 )
 
 
@@ -102,6 +103,25 @@ def test_runner_signature_accepts_observation_frames_not_ground_truth() -> None:
         seed=0,
     )
     assert result.frames[0].tracks == ()
+
+
+def test_stream_runner_notifies_each_observation_frame() -> None:
+    frames = (
+        ObservationFrame(timestamp_s=0.0, observations=()),
+        ObservationFrame(timestamp_s=1.0, observations=()),
+    )
+    notifications = []
+    result = run_tracker_stream(
+        LastObservationTracker(),
+        frames,
+        {"tracker_id": "stream-test"},
+        seed=0,
+        on_frame=lambda observation, tracking: notifications.append(
+            (observation.timestamp_s, tracking.timestamp_s)
+        ),
+    )
+    assert notifications == [(0.0, 0.0), (1.0, 1.0)]
+    assert len(result.frames) == 2
 
 
 def test_exit_candidate_uses_estimated_track_position() -> None:
